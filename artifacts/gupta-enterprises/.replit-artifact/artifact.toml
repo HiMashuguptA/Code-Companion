@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Gupta Enterprises"
+version = "1.0.0"
+id = "artifacts/gupta-enterprises"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19303
+
+[services.development]
+run = "pnpm --filter @workspace/gupta-enterprises run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gupta-enterprises", "run", "build" ]
+publicDir = "artifacts/gupta-enterprises/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19303"
+BASE_PATH = "/"

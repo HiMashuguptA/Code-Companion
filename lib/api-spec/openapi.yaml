@@ -3,20 +3,42 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Gupta Enterprises E-Commerce API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: products
+    description: Product management
+  - name: categories
+    description: Category management
+  - name: cart
+    description: Cart operations
+  - name: orders
+    description: Order management
+  - name: coupons
+    description: Coupon management
+  - name: reviews
+    description: Product reviews
+  - name: users
+    description: User management
+  - name: tracking
+    description: Delivery tracking
+  - name: notifications
+    description: Notifications
+  - name: analytics
+    description: Admin analytics
+  - name: auth
+    description: Authentication
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +46,839 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/profile:
+    get:
+      operationId: getProfile
+      tags: [auth]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+    put:
+      operationId: updateProfile
+      tags: [auth]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileBody"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/register:
+    post:
+      operationId: registerUser
+      tags: [auth]
+      summary: Register or sync a Firebase user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterUserBody"
+      responses:
+        "200":
+          description: Registered user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # PRODUCTS
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+        - name: inStock
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/featured:
+    get:
+      operationId: getFeaturedProducts
+      tags: [products]
+      summary: Get featured/top products for homepage
+      responses:
+        "200":
+          description: Featured products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get product details
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+    put:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product (Admin)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product (Admin)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # CATEGORIES
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List all categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a category (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryBody"
+      responses:
+        "201":
+          description: Created category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  # CART
+  /cart:
+    get:
+      operationId: getCart
+      tags: [cart]
+      summary: Get current user's cart
+      responses:
+        "200":
+          description: Cart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+    post:
+      operationId: addToCart
+      tags: [cart]
+      summary: Add item to cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToCartBody"
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+    delete:
+      operationId: clearCart
+      tags: [cart]
+      summary: Clear cart
+      responses:
+        "200":
+          description: Cleared cart
+
+  /cart/{itemId}:
+    put:
+      operationId: updateCartItem
+      tags: [cart]
+      summary: Update cart item quantity
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCartItemBody"
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+    delete:
+      operationId: removeCartItem
+      tags: [cart]
+      summary: Remove item from cart
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+
+  /cart/apply-coupon:
+    post:
+      operationId: applyCoupon
+      tags: [cart]
+      summary: Apply coupon to cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyCouponBody"
+      responses:
+        "200":
+          description: Cart with coupon applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+        "400":
+          description: Invalid coupon
+
+  # ORDERS
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders (user's own, or all for admin)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create a new order from cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "201":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get order details
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    put:
+      operationId: updateOrder
+      tags: [orders]
+      summary: Update order status (Admin)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderBody"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{orderId}/assign-agent:
+    post:
+      operationId: assignDeliveryAgent
+      tags: [orders]
+      summary: Assign delivery agent to order (Admin)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignAgentBody"
+      responses:
+        "200":
+          description: Order with assigned agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/delivery-agent:
+    get:
+      operationId: getDeliveryAgentOrders
+      tags: [orders]
+      summary: Get orders assigned to delivery agent
+      responses:
+        "200":
+          description: List of assigned orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  # COUPONS
+  /coupons:
+    get:
+      operationId: listCoupons
+      tags: [coupons]
+      summary: List all coupons (Admin)
+      responses:
+        "200":
+          description: List of coupons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Coupon"
+    post:
+      operationId: createCoupon
+      tags: [coupons]
+      summary: Create a coupon (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCouponBody"
+      responses:
+        "201":
+          description: Created coupon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+
+  /coupons/{couponId}:
+    put:
+      operationId: updateCoupon
+      tags: [coupons]
+      summary: Update a coupon (Admin)
+      parameters:
+        - name: couponId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCouponBody"
+      responses:
+        "200":
+          description: Updated coupon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+    delete:
+      operationId: deleteCoupon
+      tags: [coupons]
+      summary: Delete a coupon (Admin)
+      parameters:
+        - name: couponId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /coupons/validate:
+    post:
+      operationId: validateCoupon
+      tags: [coupons]
+      summary: Validate a coupon code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateCouponBody"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CouponValidationResult"
+
+  # REVIEWS
+  /reviews/product/{productId}:
+    get:
+      operationId: getProductReviews
+      tags: [reviews]
+      summary: Get reviews for a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+    post:
+      operationId: createReview
+      tags: [reviews]
+      summary: Add a review (requires delivered order)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewBody"
+      responses:
+        "201":
+          description: Created review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  /reviews/{reviewId}:
+    put:
+      operationId: updateReview
+      tags: [reviews]
+      summary: Update a review
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReviewBody"
+      responses:
+        "200":
+          description: Updated review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  # USERS (Admin)
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users (Admin)
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user details (Admin)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user role (Admin)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # TRACKING
+  /tracking/{orderId}:
+    get:
+      operationId: getOrderTracking
+      tags: [tracking]
+      summary: Get live tracking for an order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tracking info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackingInfo"
+
+  /tracking/{orderId}/location:
+    put:
+      operationId: updateDeliveryLocation
+      tags: [tracking]
+      summary: Update delivery agent location (Delivery Agent)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLocationBody"
+      responses:
+        "200":
+          description: Location updated
+
+  # NOTIFICATIONS
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: Get user notifications
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{notificationId}/read:
+    put:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked as read
+
+  /notifications/read-all:
+    put:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: All marked as read
+
+  # ANALYTICS (Admin)
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardAnalytics
+      tags: [analytics]
+      summary: Get admin dashboard analytics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [today, week, month, year]
+            default: month
+      responses:
+        "200":
+          description: Dashboard analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAnalytics"
+
+  /analytics/revenue:
+    get:
+      operationId: getRevenueAnalytics
+      tags: [analytics]
+      summary: Get revenue chart data
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, year]
+            default: month
+      responses:
+        "200":
+          description: Revenue data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenueDataPoint"
+
+  /analytics/top-products:
+    get:
+      operationId: getTopProducts
+      tags: [analytics]
+      summary: Get top selling products
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        "200":
+          description: Top products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopProduct"
+
+  /analytics/order-stats:
+    get:
+      operationId: getOrderStats
+      tags: [analytics]
+      summary: Get order status breakdown
+      responses:
+        "200":
+          description: Order stats by status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +889,841 @@ components:
       required:
         - status
 
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        firebaseUid:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [USER, ADMIN, DELIVERY_AGENT]
+        photoUrl:
+          type: string
+        addresses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Address"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - role
+        - createdAt
+
+    Address:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        pincode:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        isDefault:
+          type: boolean
+      required:
+        - id
+        - street
+        - city
+        - state
+        - pincode
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+        category:
+          $ref: "#/components/schemas/Category"
+        actualPrice:
+          type: number
+        sellingPrice:
+          type: number
+        discount:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+        stock:
+          type: integer
+        rating:
+          type: number
+        reviewCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - description
+        - actualPrice
+        - sellingPrice
+        - stock
+        - images
+        - isActive
+        - createdAt
+
+    ProductListResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - products
+        - total
+        - page
+        - limit
+        - totalPages
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+        productCount:
+          type: integer
+      required:
+        - id
+        - name
+        - slug
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        product:
+          $ref: "#/components/schemas/Product"
+        quantity:
+          type: integer
+        price:
+          type: number
+      required:
+        - id
+        - productId
+        - quantity
+        - price
+
+    Cart:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItem"
+        subtotal:
+          type: number
+        discount:
+          type: number
+        couponDiscount:
+          type: number
+        total:
+          type: number
+        couponCode:
+          type: string
+        itemCount:
+          type: integer
+      required:
+        - items
+        - subtotal
+        - discount
+        - couponDiscount
+        - total
+        - itemCount
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, PROCESSING, PACKED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, PICKUP_READY, PICKED_UP]
+        deliveryType:
+          type: string
+          enum: [DELIVERY, PICKUP]
+        deliveryAddress:
+          $ref: "#/components/schemas/Address"
+        subtotal:
+          type: number
+        discount:
+          type: number
+        couponDiscount:
+          type: number
+        total:
+          type: number
+        couponCode:
+          type: string
+        deliveryAgentId:
+          type: string
+        deliveryAgent:
+          $ref: "#/components/schemas/User"
+        estimatedDelivery:
+          type: string
+          format: date-time
+        paymentStatus:
+          type: string
+          enum: [PENDING, PAID, FAILED, REFUNDED]
+        paymentMethod:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - items
+        - status
+        - deliveryType
+        - subtotal
+        - total
+        - paymentStatus
+        - createdAt
+        - updatedAt
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        product:
+          $ref: "#/components/schemas/Product"
+        quantity:
+          type: integer
+        price:
+          type: number
+        total:
+          type: number
+      required:
+        - id
+        - productId
+        - quantity
+        - price
+        - total
+
+    OrderListResponse:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - orders
+        - total
+        - page
+        - limit
+        - totalPages
+
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        discountType:
+          type: string
+          enum: [FLAT, PERCENTAGE]
+        discountValue:
+          type: number
+        minOrderValue:
+          type: number
+        maxDiscount:
+          type: number
+        isFirstOrder:
+          type: boolean
+        isActive:
+          type: boolean
+        usageLimit:
+          type: integer
+        usageCount:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - code
+        - discountType
+        - discountValue
+        - isActive
+        - createdAt
+
+    CouponValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        discount:
+          type: number
+        message:
+          type: string
+        coupon:
+          $ref: "#/components/schemas/Coupon"
+      required:
+        - valid
+        - message
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        userId:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - productId
+        - userId
+        - rating
+        - createdAt
+
+    TrackingInfo:
+      type: object
+      properties:
+        orderId:
+          type: string
+        status:
+          type: string
+        agentName:
+          type: string
+        agentPhone:
+          type: string
+        currentLat:
+          type: number
+        currentLng:
+          type: number
+        destinationLat:
+          type: number
+        destinationLng:
+          type: number
+        estimatedDelivery:
+          type: string
+          format: date-time
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackingEvent"
+      required:
+        - orderId
+        - status
+
+    TrackingEvent:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        lat:
+          type: number
+        lng:
+          type: number
+      required:
+        - status
+        - message
+        - timestamp
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [ORDER_UPDATE, DELIVERY_UPDATE, PROMOTION, SYSTEM]
+        isRead:
+          type: boolean
+        orderId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - title
+        - message
+        - type
+        - isRead
+        - createdAt
+
+    DashboardAnalytics:
+      type: object
+      properties:
+        totalRevenue:
+          type: number
+        totalOrders:
+          type: integer
+        totalUsers:
+          type: integer
+        totalProducts:
+          type: integer
+        revenueGrowth:
+          type: number
+        ordersGrowth:
+          type: number
+        usersGrowth:
+          type: number
+        pendingOrders:
+          type: integer
+        deliveredOrders:
+          type: integer
+        cancelledOrders:
+          type: integer
+        avgOrderValue:
+          type: number
+      required:
+        - totalRevenue
+        - totalOrders
+        - totalUsers
+        - totalProducts
+        - pendingOrders
+        - deliveredOrders
+        - cancelledOrders
+        - avgOrderValue
+
+    RevenueDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        revenue:
+          type: number
+        orders:
+          type: integer
+      required:
+        - date
+        - revenue
+        - orders
+
+    TopProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        totalSold:
+          type: integer
+        revenue:
+          type: number
+      required:
+        - productId
+        - name
+        - totalSold
+        - revenue
+
+    OrderStats:
+      type: object
+      properties:
+        pending:
+          type: integer
+        confirmed:
+          type: integer
+        processing:
+          type: integer
+        outForDelivery:
+          type: integer
+        delivered:
+          type: integer
+        cancelled:
+          type: integer
+      required:
+        - pending
+        - confirmed
+        - processing
+        - outForDelivery
+        - delivered
+        - cancelled
+
+    UserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - users
+        - total
+        - page
+        - totalPages
+
+    # Request bodies
+    RegisterUserBody:
+      type: object
+      properties:
+        firebaseUid:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        photoUrl:
+          type: string
+      required:
+        - firebaseUid
+        - email
+
+    UpdateProfileBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        photoUrl:
+          type: string
+        addresses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Address"
+
+    CreateProductBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+        actualPrice:
+          type: number
+        sellingPrice:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+        stock:
+          type: integer
+      required:
+        - name
+        - description
+        - actualPrice
+        - sellingPrice
+        - stock
+        - images
+
+    UpdateProductBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+        actualPrice:
+          type: number
+        sellingPrice:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+        stock:
+          type: integer
+        isActive:
+          type: boolean
+
+    CreateCategoryBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+      required:
+        - name
+        - slug
+
+    AddToCartBody:
+      type: object
+      properties:
+        productId:
+          type: string
+        quantity:
+          type: integer
+      required:
+        - productId
+        - quantity
+
+    UpdateCartItemBody:
+      type: object
+      properties:
+        quantity:
+          type: integer
+      required:
+        - quantity
+
+    ApplyCouponBody:
+      type: object
+      properties:
+        code:
+          type: string
+      required:
+        - code
+
+    CreateOrderBody:
+      type: object
+      properties:
+        deliveryType:
+          type: string
+          enum: [DELIVERY, PICKUP]
+        deliveryAddress:
+          $ref: "#/components/schemas/Address"
+        paymentMethod:
+          type: string
+        notes:
+          type: string
+        pickupDate:
+          type: string
+          format: date-time
+      required:
+        - deliveryType
+        - paymentMethod
+
+    UpdateOrderBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, PROCESSING, PACKED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, PICKUP_READY, PICKED_UP]
+        estimatedDelivery:
+          type: string
+          format: date-time
+      required:
+        - status
+
+    AssignAgentBody:
+      type: object
+      properties:
+        agentId:
+          type: string
+      required:
+        - agentId
+
+    CreateCouponBody:
+      type: object
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        discountType:
+          type: string
+          enum: [FLAT, PERCENTAGE]
+        discountValue:
+          type: number
+        minOrderValue:
+          type: number
+        maxDiscount:
+          type: number
+        isFirstOrder:
+          type: boolean
+        usageLimit:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - code
+        - discountType
+        - discountValue
+
+    UpdateCouponBody:
+      type: object
+      properties:
+        description:
+          type: string
+        discountValue:
+          type: number
+        minOrderValue:
+          type: number
+        maxDiscount:
+          type: number
+        isFirstOrder:
+          type: boolean
+        isActive:
+          type: boolean
+        usageLimit:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+
+    ValidateCouponBody:
+      type: object
+      properties:
+        code:
+          type: string
+        orderTotal:
+          type: number
+      required:
+        - code
+        - orderTotal
+
+    CreateReviewBody:
+      type: object
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        body:
+          type: string
+        orderId:
+          type: string
+      required:
+        - rating
+        - orderId
+
+    UpdateReviewBody:
+      type: object
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        body:
+          type: string
+
+    UpdateUserBody:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [USER, ADMIN, DELIVERY_AGENT]
+        isActive:
+          type: boolean
+
+    UpdateLocationBody:
+      type: object
+      properties:
+        lat:
+          type: number
+        lng:
+          type: number
+      required:
+        - lat
+        - lng

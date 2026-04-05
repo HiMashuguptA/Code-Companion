@@ -1,0 +1,195 @@
+You are a senior full-stack developer and system architect.
+
+Build a complete, production-ready, responsive e-commerce web application named **"Gupta Enterprises"** focused on stationery products.
+
+Use modern best practices, scalable architecture, and clean UI/UX.
+
+--------------------------------------------------
+🧱 TECH STACK REQUIREMENTS
+--------------------------------------------------
+Frontend:
+- React (preferably with Vite or Next.js)
+- Material UI (MUI) for UI components
+- Responsive design (mobile-first)
+
+Backend:
+- Node.js + Express (or Next.js API routes)
+- MongoDB (Atlas) for database
+
+Authentication:
+- Firebase Authentication (Email, Google, Phone)
+
+Maps & Tracking:
+- OpenStreetMap + Leaflet for maps and live tracking
+
+--------------------------------------------------
+🔐 ROLE-BASED ACCESS CONTROL
+--------------------------------------------------
+Implement 3 roles:
+1. USER
+2. ADMIN
+3. DELIVERY_AGENT
+
+Use secure role-based authorization (JWT or Firebase + backend validation).
+
+--------------------------------------------------
+👤 USER FEATURES
+--------------------------------------------------
+- Browse and search products
+- Product details page with:
+  - Images (multiple)
+  - Discounted pricing (actual vs selling price)
+  - Reviews & ratings
+
+- Cart functionality:
+  - Add/remove/update items
+  - Apply coupons
+  - Show real-time updated pricing after coupon
+
+- Checkout:
+  - Add delivery address:
+    - Option 1: Select via map (Leaflet)
+    - Option 2: Enter manually → validate via map
+  - Payment flow (mock or Stripe integration)
+
+- Order features:
+  - Live order tracking on map
+  - Delivery agent live location
+  - Estimated delivery time (ETA)
+
+- Reviews:
+  - Add/edit review ONLY after successful delivery
+
+- Pickup option:
+  - Schedule shop pickup instead of delivery
+
+- Notifications:
+  - Order updates, delivery status, offers
+
+--------------------------------------------------
+👨‍💼 ADMIN FEATURES
+--------------------------------------------------
+- Dashboard:
+  - Daily & monthly revenue/profit analytics
+  - Order stats
+
+- Product Management:
+  - Add / Edit / Delete products
+  - Upload multiple images (file + URL)
+  - Fields:
+    - Name
+    - Description
+    - Category
+    - Actual Price
+    - Selling Price (discounted)
+    - Stock
+
+- Coupon Management:
+  - Examples:
+    - "₹50 OFF on orders above ₹1000"
+    - "₹100 OFF on first order above ₹600"
+  - Validate coupon rules dynamically
+
+- Order Management:
+  - View all orders
+  - Update order status
+  - Assign delivery agent
+
+- User Management:
+  - View users
+  - Manage accounts
+
+--------------------------------------------------
+🚚 DELIVERY AGENT FEATURES
+--------------------------------------------------
+- View assigned orders
+- Pickup & mark as "Out for Delivery"
+- Update delivery status
+- Share live location (real-time tracking)
+- Open delivery location in map
+
+--------------------------------------------------
+📡 REAL-TIME FEATURES
+--------------------------------------------------
+- Live delivery tracking (WebSockets or Firebase Realtime DB)
+- Notifications for:
+  - User
+  - Admin
+  - Delivery agent
+
+--------------------------------------------------
+🗺️ MAP FEATURES
+--------------------------------------------------
+- Leaflet + OpenStreetMap integration:
+  - Select delivery location
+  - Validate entered address
+  - Show route & ETA
+  - Live tracking of delivery agent
+
+--------------------------------------------------
+🧠 DATABASE DESIGN (MongoDB)
+--------------------------------------------------
+Design proper schemas:
+- Users
+- Products
+- Orders
+- Reviews
+- Coupons
+- Delivery Tracking
+
+Use this MongoDB connection:
+mongodb+srv://himanshu:gupta@121@gupta-enterprises.bdykkjh.mongodb.net/
+
+--------------------------------------------------
+🔥 FIREBASE CONFIGURATION
+--------------------------------------------------
+Use this Firebase config:
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCKkMvvW0T4B2Dk631D2PyVeiKAmv864xA",
+  authDomain: "gupta-enterprises-98e81.firebaseapp.com",
+  projectId: "gupta-enterprises-98e81",
+  storageBucket: "gupta-enterprises-98e81.firebasestorage.app",
+  messagingSenderId: "4113226514",
+  appId: "1:4113226514:web:0f8d62e437bbfa928931cb",
+  measurementId: "G-PLNX25ZRWZ"
+};
+
+--------------------------------------------------
+🎨 UI/UX REQUIREMENTS
+--------------------------------------------------
+- Modern, clean, and attractive UI
+- Smooth animations
+- Mobile-first responsive design
+- Skeleton loaders and empty states
+- Toast notifications
+
+--------------------------------------------------
+⚙️ ADDITIONAL REQUIREMENTS
+--------------------------------------------------
+- Error handling & validation
+- Clean folder structure
+- Reusable components
+- API layer separation
+- Environment variables for secrets
+- Code comments and documentation
+
+--------------------------------------------------
+📦 OUTPUT EXPECTATION
+--------------------------------------------------
+Provide:
+1. Full project structure
+2. Frontend code (React + MUI)
+3. Backend APIs (Node + Express)
+4. MongoDB schema design
+5. Firebase integration
+6. Map integration
+7. Step-by-step setup instructions
+
+--------------------------------------------------
+💡 BONUS (if possible)
+--------------------------------------------------
+- PWA support
+- Admin analytics charts
+- Order invoice generation
+- Dark mode toggle
