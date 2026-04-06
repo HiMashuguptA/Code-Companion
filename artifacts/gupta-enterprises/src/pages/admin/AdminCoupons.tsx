@@ -5,230 +5,274 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useListCoupons, useCreateCoupon, useUpdateCoupon, useDeleteCoupon, getListCouponsQueryKey } from "@workspace/api-client-react";
-import { formatDate, formatPrice } from "@/lib/utils";
+import {
+  useListCoupons, useCreateCoupon, useUpdateCoupon, useDeleteCoupon,
+  getListCouponsQueryKey
+} from "@workspace/api-client-react";
+import type { Coupon } from "@workspace/api-client-react";
+import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-interface CouponForm {
+type CouponForm = {
   code: string;
-  type: "PERCENTAGE" | "FIXED";
-  value: string;
-  minOrderValue: string;
-  maxDiscount: string;
-  usageLimit: string;
-  expiresAt: string;
-}
+  description: string;
+  discountType: "FLAT" | "PERCENTAGE";
+  discountValue: number;
+  minOrderValue: number | undefined;
+  maxDiscount: number | undefined;
+  usageLimit: number | undefined;
+  expiresAt: string | undefined;
+  isActive: boolean;
+};
 
-const emptyForm: CouponForm = {
-  code: "", type: "PERCENTAGE", value: "", minOrderValue: "", maxDiscount: "", usageLimit: "", expiresAt: ""
+const defaultForm: CouponForm = {
+  code: "",
+  description: "",
+  discountType: "PERCENTAGE",
+  discountValue: 10,
+  minOrderValue: undefined,
+  maxDiscount: undefined,
+  usageLimit: undefined,
+  expiresAt: undefined,
+  isActive: true,
 };
 
 export function AdminCoupons() {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<CouponForm>(emptyForm);
+  const [editCoupon, setEditCoupon] = useState<Coupon | null>(null);
+  const [form, setForm] = useState<CouponForm>(defaultForm);
 
-  const { data: coupons, isLoading } = useListCoupons();
+  const { data: coupons, isLoading } = useListCoupons({
+    query: { queryKey: getListCouponsQueryKey() }
+  });
+
   const createCoupon = useCreateCoupon();
-  const updateCoupon = useUpdateCoupon(editingId ?? "");
-  const deleteCoupon = useDeleteCoupon;
+  const updateCoupon = useUpdateCoupon();
+  const deleteCoupon = useDeleteCoupon();
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm(emptyForm);
+  const openNew = () => {
+    setEditCoupon(null);
+    setForm(defaultForm);
     setOpen(true);
   };
 
-  const openEdit = (coupon: NonNullable<typeof coupons>[0]) => {
-    setEditingId(coupon.id);
+  const openEdit = (c: Coupon) => {
+    setEditCoupon(c);
     setForm({
-      code: coupon.code,
-      type: coupon.type as "PERCENTAGE" | "FIXED",
-      value: String(coupon.value),
-      minOrderValue: String(coupon.minOrderValue ?? ""),
-      maxDiscount: String(coupon.maxDiscount ?? ""),
-      usageLimit: String(coupon.usageLimit ?? ""),
-      expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString().split("T")[0] : "",
+      code: c.code,
+      description: c.description ?? "",
+      discountType: c.discountType as "FLAT" | "PERCENTAGE",
+      discountValue: c.discountValue,
+      minOrderValue: c.minOrderValue,
+      maxDiscount: c.maxDiscount,
+      usageLimit: c.usageLimit,
+      expiresAt: c.expiresAt ? c.expiresAt.slice(0, 10) : undefined,
+      isActive: c.isActive,
     });
     setOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const payload = {
-      code: form.code.toUpperCase(),
-      type: form.type,
-      value: parseFloat(form.value),
-      minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
-      maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
-      usageLimit: form.usageLimit ? parseInt(form.usageLimit, 10) : undefined,
-      expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
+  const handleSave = () => {
+    const data = {
+      code: form.code,
+      description: form.description || undefined,
+      discountType: form.discountType,
+      discountValue: form.discountValue,
+      minOrderValue: form.minOrderValue,
+      maxDiscount: form.maxDiscount,
+      usageLimit: form.usageLimit,
+      expiresAt: form.expiresAt || undefined,
+      isActive: form.isActive,
     };
 
-    if (editingId) {
-      updateCoupon.mutate({ data: payload }, {
+    if (editCoupon) {
+      updateCoupon.mutate({ couponId: editCoupon.id, data }, {
         onSuccess: () => {
           toast.success("Coupon updated");
           setOpen(false);
-          queryClient.invalidateQueries({ queryKey: getListCouponsQueryKey() });
+          qc.invalidateQueries({ queryKey: getListCouponsQueryKey() });
         },
-        onError: (err: unknown) => toast.error((err as { data?: { error?: string } })?.data?.error ?? "Failed"),
+        onError: () => toast.error("Failed to update coupon"),
       });
     } else {
-      createCoupon.mutate({ data: payload }, {
+      createCoupon.mutate({ data }, {
         onSuccess: () => {
           toast.success("Coupon created");
           setOpen(false);
-          queryClient.invalidateQueries({ queryKey: getListCouponsQueryKey() });
+          qc.invalidateQueries({ queryKey: getListCouponsQueryKey() });
         },
-        onError: (err: unknown) => toast.error((err as { data?: { error?: string } })?.data?.error ?? "Failed"),
+        onError: () => toast.error("Failed to create coupon"),
       });
     }
   };
 
-  const handleDelete = (id: string, code: string) => {
-    if (!confirm(`Delete coupon "${code}"?`)) return;
-    const mutation = deleteCoupon(id);
-    mutation.mutate({}, {
+  const handleDelete = (couponId: string) => {
+    if (!confirm("Are you sure you want to delete this coupon?")) return;
+    deleteCoupon.mutate({ couponId }, {
       onSuccess: () => {
         toast.success("Coupon deleted");
-        queryClient.invalidateQueries({ queryKey: getListCouponsQueryKey() });
+        qc.invalidateQueries({ queryKey: getListCouponsQueryKey() });
       },
+      onError: () => toast.error("Failed to delete coupon"),
     });
   };
 
-  const copyCode = (code: string) => {
+  const handleCopy = (code: string) => {
     navigator.clipboard.writeText(code);
-    toast.success(`Copied: ${code}`);
+    toast.success("Coupon code copied!");
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">Coupons</h1>
-        <Button onClick={openCreate} size="sm" className="gap-1.5">
-          <Plus className="w-4 h-4" /> Add Coupon
-        </Button>
+        <h1 className="text-2xl font-bold">Coupons</h1>
+        <Button onClick={openNew} className="gap-2"><Plus className="w-4 h-4" /> New Coupon</Button>
       </div>
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        <div className="grid sm:grid-cols-2 gap-4">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}
+        </div>
+      ) : !coupons?.length ? (
+        <div className="text-center py-16">
+          <Tag className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+          <p className="text-muted-foreground mb-4">No coupons yet</p>
+          <Button onClick={openNew}>Create First Coupon</Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {coupons?.map(coupon => (
-            <div key={coupon.id} className="bg-card border rounded-xl p-4 flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <code className="text-sm font-bold bg-muted px-2 py-0.5 rounded">{coupon.code}</code>
-                  <button onClick={() => copyCode(coupon.code)} className="text-muted-foreground hover:text-foreground">
-                    <Copy className="w-3.5 h-3.5" />
+        <div className="grid sm:grid-cols-2 gap-4">
+          {coupons.map((c: Coupon) => (
+            <div key={c.id} className="bg-card border rounded-xl p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleCopy(c.code)}
+                    className="font-mono font-bold text-lg hover:text-primary transition-colors flex items-center gap-1">
+                    {c.code}
+                    <Copy className="w-3.5 h-3.5 opacity-60" />
                   </button>
-                  <Badge variant={coupon.isActive ? "default" : "secondary"} className="text-xs">
-                    {coupon.isActive ? "Active" : "Inactive"}
-                  </Badge>
+                  {c.isActive ? (
+                    <Badge className="bg-green-100 text-green-700 text-xs">Active</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {coupon.type === "PERCENTAGE" ? `${coupon.value}% off` : `₹${coupon.value} off`}
-                  </span>
-                  {coupon.minOrderValue && <span>Min: {formatPrice(coupon.minOrderValue)}</span>}
-                  {coupon.maxDiscount && <span>Max: {formatPrice(coupon.maxDiscount)}</span>}
-                  {coupon.expiresAt && <span>Expires: {formatDate(coupon.expiresAt)}</span>}
-                  <span>Used: {coupon.usedCount ?? 0}{coupon.usageLimit ? `/${coupon.usageLimit}` : ""}</span>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c.id)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(coupon)}>
-                  <Edit2 className="w-3.5 h-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(coupon.id, coupon.code)}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+
+              {c.description && <p className="text-sm text-muted-foreground mb-2">{c.description}</p>}
+
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                  {c.discountType === "PERCENTAGE" ? `${c.discountValue}% off` : `₹${c.discountValue} off`}
+                </span>
+                {c.minOrderValue && (
+                  <span className="bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                    Min ₹{c.minOrderValue}
+                  </span>
+                )}
+                {c.maxDiscount && c.discountType === "PERCENTAGE" && (
+                  <span className="bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                    Max ₹{c.maxDiscount}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex justify-between mt-3 text-xs text-muted-foreground">
+                <span>Used: {c.usageCount ?? 0}{c.usageLimit ? `/${c.usageLimit}` : ""}</span>
+                {c.expiresAt && <span>Expires {formatDate(c.expiresAt)}</span>}
               </div>
             </div>
           ))}
-
-          {!coupons?.length && (
-            <div className="text-center py-12 text-muted-foreground">
-              <Tag className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p>No coupons yet. Create your first coupon!</p>
-            </div>
-          )}
         </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Coupon" : "Create Coupon"}</DialogTitle>
+            <DialogTitle>{editCoupon ? "Edit Coupon" : "Create Coupon"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-3 mt-2">
+          <div className="space-y-4 py-2">
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Coupon Code *</Label>
-              <input type="text" required placeholder="WELCOME100"
-                className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50 uppercase"
-                value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+              <Label className="text-xs text-muted-foreground">Code *</Label>
+              <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50 uppercase font-mono"
+                placeholder="SAVE20" value={form.code}
+                onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Description</Label>
+              <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="20% off on all stationery" value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Type *</Label>
-                <Select value={form.type} onValueChange={(v: "PERCENTAGE" | "FIXED") => setForm(f => ({ ...f, type: v }))}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                    <SelectItem value="FIXED">Fixed (₹)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-muted-foreground">Discount Type</Label>
+                <select className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={form.discountType} onChange={e => setForm(f => ({ ...f, discountType: e.target.value as "FLAT" | "PERCENTAGE" }))}>
+                  <option value="PERCENTAGE">Percentage (%)</option>
+                  <option value="FLAT">Flat (₹)</option>
+                </select>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">
-                  Value * ({form.type === "PERCENTAGE" ? "%" : "₹"})
-                </Label>
-                <input type="number" required placeholder={form.type === "PERCENTAGE" ? "10" : "100"}
-                  className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Min Order (₹)</Label>
-                <input type="number" placeholder="500"
-                  className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={form.minOrderValue} onChange={e => setForm(f => ({ ...f, minOrderValue: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Max Discount (₹)</Label>
-                <input type="number" placeholder="200"
-                  className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={form.maxDiscount} onChange={e => setForm(f => ({ ...f, maxDiscount: e.target.value }))} />
+                <Label className="text-xs text-muted-foreground">Discount Value *</Label>
+                <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder={form.discountType === "PERCENTAGE" ? "10" : "50"}
+                  value={form.discountValue || ""}
+                  onChange={e => setForm(f => ({ ...f, discountValue: parseFloat(e.target.value) || 0 }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Usage Limit</Label>
-                <input type="number" placeholder="100"
-                  className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={form.usageLimit} onChange={e => setForm(f => ({ ...f, usageLimit: e.target.value }))} />
+                <Label className="text-xs text-muted-foreground">Min Order (₹)</Label>
+                <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="200"
+                  value={form.minOrderValue ?? ""}
+                  onChange={e => setForm(f => ({ ...f, minOrderValue: e.target.value ? parseFloat(e.target.value) : undefined }))} />
+              </div>
+              {form.discountType === "PERCENTAGE" && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Max Discount (₹)</Label>
+                  <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="100"
+                    value={form.maxDiscount ?? ""}
+                    onChange={e => setForm(f => ({ ...f, maxDiscount: e.target.value ? parseFloat(e.target.value) : undefined }))} />
+                </div>
+              )}
+              <div>
+                <Label className="text-xs text-muted-foreground">Usage Limit</Label>
+                <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="100"
+                  value={form.usageLimit ?? ""}
+                  onChange={e => setForm(f => ({ ...f, usageLimit: e.target.value ? parseInt(e.target.value) : undefined }))} />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Expires At</Label>
-                <input type="date"
-                  className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={form.expiresAt} onChange={e => setForm(f => ({ ...f, expiresAt: e.target.value }))} />
+                <Label className="text-xs text-muted-foreground">Expires At</Label>
+                <input type="date" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={form.expiresAt ?? ""}
+                  onChange={e => setForm(f => ({ ...f, expiresAt: e.target.value || undefined }))} />
               </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="isActive" checked={form.isActive}
+                onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="accent-primary" />
+              <Label htmlFor="isActive" className="cursor-pointer">Active</Label>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">Cancel</Button>
-              <Button type="submit" className="flex-1" disabled={createCoupon.isPending || updateCoupon.isPending}>
-                {editingId ? "Update" : "Create"} Coupon
+              <Button onClick={handleSave} disabled={createCoupon.isPending || updateCoupon.isPending} className="flex-1">
+                {editCoupon ? "Update Coupon" : "Create Coupon"}
               </Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             </div>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

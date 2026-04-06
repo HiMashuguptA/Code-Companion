@@ -3,108 +3,97 @@ import { Package, ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useListOrders, useUpdateOrder, getListOrdersQueryKey } from "@workspace/api-client-react";
-import { formatPrice, formatDateTime, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useListOrders, useUpdateOrder,
+  getListOrdersQueryKey
+} from "@workspace/api-client-react";
+import type { Order } from "@workspace/api-client-react";
+import { formatPrice, formatDate, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-const ORDER_STATUSES = [
-  "ALL", "PENDING", "CONFIRMED", "PROCESSING", "PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"
-] as const;
+const ORDER_STATUSES = ["PENDING","CONFIRMED","PROCESSING","PACKED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED","PICKUP_READY"] as const;
 
 export function AdminOrders() {
   const [, navigate] = useLocation();
-  const [status, setStatus] = useState<string>("ALL");
-  const [page, setPage] = useState(1);
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  const params = { status: status === "ALL" ? undefined : status, page, limit: 15 };
-  const { data, isLoading } = useListOrders(params, {
-    query: { queryKey: getListOrdersQueryKey(params) }
+  const { data, isLoading } = useListOrders({ status: statusFilter !== "ALL" ? statusFilter : undefined }, {
+    query: { queryKey: getListOrdersQueryKey({ status: statusFilter !== "ALL" ? statusFilter : undefined }) }
   });
-
-  const updateStatus = useUpdateOrder;
+  const updateOrder = useUpdateOrder();
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    const mutation = updateStatus(orderId);
-    mutation.mutate(
-      { data: { status: newStatus } },
-      {
-        onSuccess: () => {
-          toast.success("Order status updated");
-          queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey(params) });
-        },
-        onError: (err: unknown) => toast.error((err as { data?: { error?: string } })?.data?.error ?? "Failed to update"),
-      }
-    );
+    updateOrder.mutate({ orderId, data: { status: newStatus as Order["status"] } }, {
+      onSuccess: () => {
+        toast.success("Order status updated");
+        qc.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+      },
+      onError: () => toast.error("Failed to update order"),
+    });
   };
+
+  const orders = data?.orders ?? [];
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl font-bold">Orders</h1>
-        <Select value={status} onValueChange={v => { setStatus(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Orders</h1>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="ALL">All Statuses</SelectItem>
             {ORDER_STATUSES.map(s => (
-              <SelectItem key={s} value={s}>{s === "ALL" ? "All Orders" : getOrderStatusLabel(s)}</SelectItem>
+              <SelectItem key={s} value={s}>{getOrderStatusLabel(s)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      ) : !orders.length ? (
+        <div className="text-center py-16">
+          <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+          <p className="text-muted-foreground">No orders found</p>
         </div>
       ) : (
-        <>
-          <div className="space-y-2">
-            {data?.orders.map(order => (
-              <div key={order.id} className="bg-card border rounded-xl p-4 flex flex-wrap items-center gap-3">
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/admin/orders/${order.id}`)}>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">#{order.id}</p>
-                    <Badge className={`text-xs ${getOrderStatusColor(order.status)}`}>
-                      {getOrderStatusLabel(order.status)}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatDateTime(order.createdAt)} · {(order.items as unknown[]).length} items · {formatPrice(order.total)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {(order.user as { name?: string; email?: string })?.name ?? (order.user as { email?: string })?.email}
+        <div className="space-y-3">
+          {orders.map((order: Order) => (
+            <div key={order.id} className="bg-card border rounded-xl p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-medium text-sm">#{order.id.slice(-8).toUpperCase()}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {(order.items?.length ?? 0)} item{(order.items?.length ?? 0) !== 1 ? "s" : ""} · {formatPrice(order.total)}
                   </p>
                 </div>
-                <Select
-                  value={order.status}
-                  onValueChange={v => handleStatusChange(order.id, v)}
-                >
-                  <SelectTrigger className="w-40 text-xs h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ORDER_STATUSES.filter(s => s !== "ALL").map(s => (
-                      <SelectItem key={s} value={s} className="text-xs">{getOrderStatusLabel(s)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <Badge className={getOrderStatusColor(order.status)}>{getOrderStatusLabel(order.status)}</Badge>
+                  <Select value={order.status} onValueChange={v => handleStatusChange(order.id, v)}>
+                    <SelectTrigger className="h-7 text-xs w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ORDER_STATUSES.map(s => (
+                        <SelectItem key={s} value={s} className="text-xs">{getOrderStatusLabel(s)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/orders/${order.id}`)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            ))}
-          </div>
-
-          {data && data.totalPages > 1 && (
-            <div className="flex justify-center gap-2 mt-6">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-              <span className="flex items-center text-sm text-muted-foreground px-2">{page} / {data.totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
   );

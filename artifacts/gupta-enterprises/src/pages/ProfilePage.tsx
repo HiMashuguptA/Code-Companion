@@ -1,143 +1,148 @@
-import { useState } from "react";
-import { User, Mail, Phone, MapPin, Camera } from "lucide-react";
+import { useState, useEffect } from "react";
+import { User, Mail, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useUpdateProfile } from "@workspace/api-client-react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useGetProfile, useUpdateProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetProfileQueryKey } from "@workspace/api-client-react";
 
 export function ProfilePage() {
   const { currentUser, dbUser, signOut } = useAuth();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
+
+  const { data: profile, isLoading } = useGetProfile({
+    query: { queryKey: getGetProfileQueryKey(), enabled: !!currentUser }
+  });
   const updateProfile = useUpdateProfile();
 
-  const [name, setName] = useState(dbUser?.name ?? "");
-  const [phone, setPhone] = useState(dbUser?.phone ?? "");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [editing, setEditing] = useState(false);
 
-  if (!currentUser || !dbUser) {
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name ?? "");
+      setPhone(profile.phone ?? "");
+    }
+  }, [profile]);
+
+  const handleSave = () => {
+    updateProfile.mutate({ data: { name: name || undefined, phone: phone || undefined } }, {
+      onSuccess: () => {
+        toast.success("Profile updated!");
+        setEditing(false);
+        qc.invalidateQueries({ queryKey: getGetProfileQueryKey() });
+      },
+      onError: () => toast.error("Failed to update profile"),
+    });
+  };
+
+  if (!currentUser) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <User className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-        <p className="text-muted-foreground">Please sign in to view your profile</p>
+        <h2 className="text-xl font-semibold mb-2">Please sign in to view your profile</h2>
       </div>
     );
   }
 
-  const handleSave = () => {
-    updateProfile.mutate(
-      { data: { name: name || undefined, phone: phone || undefined } },
-      {
-        onSuccess: () => {
-          toast.success("Profile updated");
-          setEditing(false);
-          queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey() });
-        },
-        onError: () => toast.error("Failed to update profile"),
-      }
-    );
-  };
+  if (isLoading) return (
+    <div className="container mx-auto px-4 py-8 max-w-lg">
+      <Skeleton className="h-8 w-32 mb-6" />
+      <Skeleton className="h-32 w-full rounded-2xl mb-4" />
+      <Skeleton className="h-48 w-full rounded-2xl" />
+    </div>
+  );
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-8">My Profile</h1>
+    <div className="container mx-auto px-4 py-8 max-w-lg">
+      <h1 className="text-2xl font-bold mb-6">My Profile</h1>
 
-      {/* Avatar & Role */}
-      <div className="bg-card border rounded-xl p-6 mb-6">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative">
-            {dbUser.photoUrl ? (
-              <img src={dbUser.photoUrl} alt={dbUser.name ?? "User"} className="w-20 h-20 rounded-full object-cover" />
+      {/* Avatar + role */}
+      <div className="bg-card border rounded-2xl p-6 mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold shrink-0 overflow-hidden">
+            {profile?.photoUrl ? (
+              <img src={profile.photoUrl} alt={profile.name ?? "User"} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-3xl font-bold text-primary">
-                {(dbUser.name ?? currentUser.email ?? "U")[0]?.toUpperCase()}
-              </div>
+              (profile?.name ?? currentUser.email ?? "U")[0]?.toUpperCase()
             )}
           </div>
           <div>
-            <h2 className="text-xl font-semibold">{dbUser.name ?? currentUser.email}</h2>
-            <p className="text-sm text-muted-foreground">{currentUser.email}</p>
-            <div className="mt-2">
-              <span className={`inline-block text-xs px-2 py-1 rounded-full font-medium ${
-                dbUser.role === "ADMIN" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" :
-                dbUser.role === "DELIVERY_AGENT" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" :
-                "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-              }`}>
-                {dbUser.role === "DELIVERY_AGENT" ? "Delivery Agent" : dbUser.role === "ADMIN" ? "Admin" : "Customer"}
-              </span>
-            </div>
+            <p className="font-semibold text-lg">{profile?.name ?? "No name set"}</p>
+            <p className="text-sm text-muted-foreground">{profile?.email ?? currentUser.email}</p>
+            <Badge variant="secondary" className="mt-1 text-xs capitalize">
+              {(dbUser?.role ?? "USER").toLowerCase().replace("_", " ")}
+            </Badge>
           </div>
         </div>
       </div>
 
-      {/* Profile Form */}
-      <div className="bg-card border rounded-xl p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">Personal Information</h3>
-          {!editing ? (
-            <Button variant="outline" size="sm" onClick={() => { setName(dbUser.name ?? ""); setPhone(dbUser.phone ?? ""); setEditing(true); }}>
-              Edit
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSave} disabled={updateProfile.isPending}>Save</Button>
-            </div>
-          )}
+      {/* Profile details */}
+      <div className="bg-card border rounded-2xl p-6 mb-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="font-semibold">Personal Information</h2>
+          {!editing && <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>}
         </div>
 
         <div className="space-y-4">
           <div>
-            <Label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-              <User className="w-3.5 h-3.5" /> Full Name
-            </Label>
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Full Name</Label>
             {editing ? (
-              <input
-                className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Enter your name"
-              />
+              <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
             ) : (
-              <p className="text-sm py-2">{dbUser.name ?? <span className="text-muted-foreground">Not set</span>}</p>
+              <p className="mt-1 text-sm">{profile?.name ?? <span className="text-muted-foreground italic">Not set</span>}</p>
             )}
           </div>
 
           <div>
-            <Label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-              <Mail className="w-3.5 h-3.5" /> Email
-            </Label>
-            <p className="text-sm py-2">{currentUser.email ?? <span className="text-muted-foreground">Not available</span>}</p>
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
+            <p className="mt-1 text-sm">{profile?.email ?? currentUser.email}</p>
           </div>
 
           <div>
-            <Label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-              <Phone className="w-3.5 h-3.5" /> Phone Number
-            </Label>
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</Label>
             {editing ? (
-              <input
-                className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="+91 98765 43210"
-              />
+              <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 XXXXXXXXXX" type="tel" />
             ) : (
-              <p className="text-sm py-2">{dbUser.phone ?? <span className="text-muted-foreground">Not set</span>}</p>
+              <p className="mt-1 text-sm">{profile?.phone ?? <span className="text-muted-foreground italic">Not set</span>}</p>
             )}
           </div>
+
+          {profile?.addresses && profile.addresses.length > 0 && (
+            <div>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Saved Addresses</Label>
+              <div className="mt-1 space-y-1">
+                {profile.addresses.map((addr: { id: string; label?: string; street: string; city: string; state: string; pincode: string }) => (
+                  <div key={addr.id} className="text-sm p-2 bg-muted rounded-lg">
+                    {addr.label && <span className="font-medium text-xs text-muted-foreground uppercase">{addr.label} </span>}
+                    {[addr.street, addr.city, addr.state, addr.pincode].filter(Boolean).join(", ")}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {editing && (
+          <div className="flex gap-2 mt-4">
+            <Button onClick={handleSave} disabled={updateProfile.isPending} className="flex-1">
+              {updateProfile.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+          </div>
+        )}
       </div>
 
-      {/* Sign Out */}
-      <div className="bg-card border rounded-xl p-6">
-        <h3 className="font-semibold mb-4">Account</h3>
-        <Button variant="outline" onClick={() => signOut()} className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground">
-          Sign Out
-        </Button>
-      </div>
+      <Separator className="my-4" />
+
+      <Button variant="destructive" className="w-full" onClick={() => signOut()}>Sign Out</Button>
     </div>
   );
 }

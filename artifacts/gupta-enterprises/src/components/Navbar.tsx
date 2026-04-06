@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Bell, User, Search, Menu, X, Sun, Moon, Package, LayoutDashboard, Truck } from "lucide-react";
+import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/FirebaseContext";
-import { useGetCart, useListNotifications, useMarkAllNotificationsRead } from "@workspace/api-client-react";
+import { useGetCart, useListNotifications, useMarkAllNotificationsRead, getGetCartQueryKey, getListNotificationsQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDateTime } from "@/lib/utils";
+import type { Notification } from "@workspace/api-client-react";
 
 export function Navbar() {
   const [location, navigate] = useLocation();
@@ -19,18 +20,20 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: cart } = useGetCart({ query: { enabled: !!currentUser, retry: false } });
-  const { data: notifications } = useListNotifications({ query: { enabled: !!currentUser, retry: false } });
+  const { data: cart } = useGetCart({
+    query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false }
+  });
+  const { data: notifications } = useListNotifications({
+    query: { queryKey: getListNotificationsQueryKey(), enabled: !!currentUser, retry: false }
+  });
   const markAllRead = useMarkAllNotificationsRead();
 
   const cartCount = cart?.itemCount ?? 0;
-  const unreadCount = notifications?.filter(n => !n.isRead).length ?? 0;
+  const unreadCount = notifications?.filter((n: Notification) => !n.isRead).length ?? 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
+    if (searchQuery.trim()) navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const navLinks = [
@@ -41,7 +44,6 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-16 flex items-center gap-4">
-        {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <Package className="w-5 h-5 text-primary-foreground" />
@@ -49,40 +51,30 @@ export function Navbar() {
           <span className="font-bold text-lg hidden sm:block">Gupta Enterprises</span>
         </Link>
 
-        {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-1 ml-2">
           {navLinks.map(link => (
             <Link key={link.href} href={link.href}>
-              <Button variant={location === link.href ? "secondary" : "ghost"} size="sm">
-                {link.label}
-              </Button>
+              <Button variant={location === link.href ? "secondary" : "ghost"} size="sm">{link.label}</Button>
             </Link>
           ))}
         </nav>
 
-        {/* Search */}
         <form onSubmit={handleSearch} className="flex-1 max-w-md hidden sm:flex">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="search"
-              placeholder="Search pens, notebooks, art supplies..."
+            <input type="search" placeholder="Search pens, notebooks, art supplies..."
               className="w-full pl-9 pr-4 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+              value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
         </form>
 
         <div className="flex items-center gap-1 ml-auto">
-          {/* Theme Toggle */}
           <Button variant="ghost" size="icon" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
             {resolvedTheme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </Button>
 
           {currentUser ? (
             <>
-              {/* Notifications */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative">
@@ -98,28 +90,25 @@ export function Navbar() {
                   <div className="flex items-center justify-between p-3 border-b">
                     <span className="font-semibold text-sm">Notifications</span>
                     {unreadCount > 0 && (
-                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => markAllRead.mutate({})}>
+                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => markAllRead.mutate(undefined)}>
                         Mark all read
                       </Button>
                     )}
                   </div>
                   <ScrollArea className="h-72">
-                    {notifications?.length === 0 ? (
+                    {!notifications?.length ? (
                       <p className="text-center text-sm text-muted-foreground py-8">No notifications</p>
-                    ) : (
-                      notifications?.map(n => (
-                        <div key={n.id} className={`p-3 border-b last:border-0 ${!n.isRead ? "bg-primary/5" : ""}`}>
-                          <p className="text-sm font-medium">{n.title}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{formatDateTime(n.createdAt)}</p>
-                        </div>
-                      ))
-                    )}
+                    ) : notifications.map((n: Notification) => (
+                      <div key={n.id} className={`p-3 border-b last:border-0 ${!n.isRead ? "bg-primary/5" : ""}`}>
+                        <p className="text-sm font-medium">{n.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatDateTime(n.createdAt)}</p>
+                      </div>
+                    ))}
                   </ScrollArea>
                 </PopoverContent>
               </Popover>
 
-              {/* Cart */}
               <Link href="/cart">
                 <Button variant="ghost" size="icon" className="relative">
                   <ShoppingCart className="w-5 h-5" />
@@ -131,7 +120,6 @@ export function Navbar() {
                 </Button>
               </Link>
 
-              {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
@@ -150,48 +138,31 @@ export function Navbar() {
                     <p className="text-xs text-muted-foreground capitalize">{dbUser?.role?.toLowerCase().replace("_", " ")}</p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/profile")}>
-                    <User className="w-4 h-4 mr-2" /> Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/orders")}>
-                    <Package className="w-4 h-4 mr-2" /> My Orders
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/profile")}><User className="w-4 h-4 mr-2" /> Profile</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/orders")}><Package className="w-4 h-4 mr-2" /> My Orders</DropdownMenuItem>
                   {dbUser?.role === "ADMIN" && (
-                    <DropdownMenuItem onClick={() => navigate("/admin")}>
-                      <LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/admin")}><LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard</DropdownMenuItem>
                   )}
-                  {dbUser?.role === "DELIVERY_AGENT" && (
-                    <DropdownMenuItem onClick={() => navigate("/delivery")}>
-                      <Truck className="w-4 h-4 mr-2" /> Delivery Portal
-                    </DropdownMenuItem>
+                  {(dbUser?.role === "DELIVERY_AGENT" || dbUser?.role === "ADMIN") && (
+                    <DropdownMenuItem onClick={() => navigate("/delivery")}><Truck className="w-4 h-4 mr-2" /> Delivery Portal</DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => signOut()} className="text-destructive">
-                    Sign Out
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => signOut()} className="text-destructive">Sign Out</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
           ) : (
             <>
               <Link href="/cart">
-                <Button variant="ghost" size="icon" className="relative">
-                  <ShoppingCart className="w-5 h-5" />
-                </Button>
+                <Button variant="ghost" size="icon" className="relative"><ShoppingCart className="w-5 h-5" /></Button>
               </Link>
-              <Link href="/auth">
-                <Button size="sm">Sign In</Button>
-              </Link>
+              <Link href="/auth"><Button size="sm">Sign In</Button></Link>
             </>
           )}
 
-          {/* Mobile Menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="w-5 h-5" />
-              </Button>
+              <Button variant="ghost" size="icon" className="md:hidden"><Menu className="w-5 h-5" /></Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72">
               <div className="flex items-center gap-2 mb-6">
@@ -203,21 +174,15 @@ export function Navbar() {
               <form onSubmit={handleSearch} className="mb-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="search"
-                    placeholder="Search products..."
+                  <input type="search" placeholder="Search products..."
                     className="w-full pl-9 pr-4 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                  />
+                    value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                 </div>
               </form>
               <nav className="flex flex-col gap-1">
                 {navLinks.map(link => (
                   <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)}>
-                    <Button variant={location === link.href ? "secondary" : "ghost"} className="w-full justify-start">
-                      {link.label}
-                    </Button>
+                    <Button variant={location === link.href ? "secondary" : "ghost"} className="w-full justify-start">{link.label}</Button>
                   </Link>
                 ))}
               </nav>

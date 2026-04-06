@@ -13,7 +13,7 @@ import {
   type ConfirmationResult
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { useRegisterUser, useGetProfile, setAuthTokenGetter } from "@workspace/api-client-react";
+import { useRegisterUser, useGetProfile, setAuthTokenGetter, getGetProfileQueryKey } from "@workspace/api-client-react";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCKkMvvW0T4B2Dk631D2PyVeiKAmv864xA",
@@ -30,9 +30,7 @@ export const auth = getAuth(app);
 
 setAuthTokenGetter(async () => {
   const user = auth.currentUser;
-  if (user) {
-    return await user.getIdToken();
-  }
+  if (user) return await user.getIdToken();
   return null;
 });
 
@@ -66,7 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const { data: dbUser, refetch: refetchProfile } = useGetProfile({
-    query: { enabled: !!currentUser, retry: false }
+    query: {
+      queryKey: getGetProfileQueryKey(),
+      enabled: !!currentUser,
+      retry: false
+    }
   });
 
   const registerMutation = useRegisterUser();
@@ -86,9 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           });
           await refetchProfile();
-        } catch (_e) {
-          // silent fail - user may already exist
-        }
+        } catch (_e) { /* silent - user may already exist */ }
       }
       setIsLoading(false);
     });
@@ -113,15 +113,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const setupRecaptcha = (containerId: string) => {
-    if (!(window as Record<string, unknown>).recaptchaVerifier) {
-      (window as Record<string, unknown>).recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-        size: "invisible"
-      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (!w.recaptchaVerifier) {
+      w.recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: "invisible" });
     }
   };
 
-  const sendPhoneOTP = async (phone: string) => {
-    return signInWithPhoneNumber(auth, phone, (window as Record<string, unknown>).recaptchaVerifier as RecaptchaVerifier);
+  const sendPhoneOTP = async (phone: string): Promise<ConfirmationResult> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    return signInWithPhoneNumber(auth, phone, w.recaptchaVerifier as RecaptchaVerifier);
   };
 
   return (
