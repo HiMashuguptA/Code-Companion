@@ -7,6 +7,7 @@ export const categoriesTable = pgTable("categories", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   icon: text("icon"),
+  image: text("image"), // Category image URL
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

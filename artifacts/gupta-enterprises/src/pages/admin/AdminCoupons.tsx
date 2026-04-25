@@ -10,6 +10,8 @@ import {
   getListCouponsQueryKey
 } from "@workspace/api-client-react";
 import type { Coupon } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/FirebaseContext";
+import { useLocation } from "wouter";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,12 +42,14 @@ const defaultForm: CouponForm = {
 
 export function AdminCoupons() {
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [editCoupon, setEditCoupon] = useState<Coupon | null>(null);
   const [form, setForm] = useState<CouponForm>(defaultForm);
 
   const { data: coupons, isLoading } = useListCoupons({
-    query: { queryKey: getListCouponsQueryKey() }
+    query: { queryKey: getListCouponsQueryKey(), retry: false }
   });
 
   const createCoupon = useCreateCoupon();
@@ -123,6 +127,30 @@ export function AdminCoupons() {
     navigator.clipboard.writeText(code);
     toast.success("Coupon code copied!");
   };
+
+  // Show skeleton while auth is loading
+  if (authLoading) return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-10 w-40" />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-4">
+        {[1,2,3,4].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}
+      </div>
+    </div>
+  );
+
+  // Show sign in message if not authenticated
+  if (!currentUser) {
+    return (
+      <div className="text-center py-16">
+        <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+        <p className="text-muted-foreground mb-4">You need to sign in as an admin to access this page</p>
+        <Button onClick={() => navigate("/auth")}>Sign In</Button>
+      </div>
+    );
+  }
 
   return (
     <div>

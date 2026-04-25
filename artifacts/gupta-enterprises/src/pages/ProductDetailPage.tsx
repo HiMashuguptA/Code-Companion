@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Star, ShoppingCart, Heart, ArrowLeft, Tag, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  useGetProduct, useListReviews, useGetOrders, useAddToCart, useCreateReview,
-  getGetProductQueryKey, getListReviewsQueryKey, getGetOrdersQueryKey, getGetCartQueryKey
+  useGetProduct, useGetProductReviews, useListOrders, useAddToCart, useCreateReview,
+  useCheckFavorite, useAddFavorite, useRemoveFavorite,
+  getGetProductQueryKey, getGetProductReviewsQueryKey, getListOrdersQueryKey, getGetCartQueryKey
 } from "@workspace/api-client-react";
 import type { Review } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
@@ -24,22 +25,81 @@ export function ProductDetailPage() {
   const qc = useQueryClient();
 
   const { data: product, isLoading } = useGetProduct(productId, {
-    query: { queryKey: getGetProductQueryKey(productId), enabled: !!productId }
+    query: { 
+      queryKey: getGetProductQueryKey(productId), 
+      enabled: !!productId,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
-  const { data: reviews } = useListReviews(productId, {
-    query: { queryKey: getListReviewsQueryKey(productId), enabled: !!productId }
+  const { data: reviews } = useGetProductReviews(productId, {
+    query: { 
+      queryKey: getGetProductReviewsQueryKey(productId), 
+      enabled: !!productId,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
-  const { data: ordersData } = useGetOrders({
-    query: { queryKey: getGetOrdersQueryKey(), enabled: !!currentUser }
+  const { data: ordersData } = useListOrders({
+    query: { 
+      queryKey: getListOrdersQueryKey(), 
+      enabled: !!currentUser,
+      retry: false,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
 
   const addToCart = useAddToCart();
   const createReview = useCreateReview();
+  const { data: favoriteStatus } = useCheckFavorite(productId, {
+    query: { enabled: !!currentUser && !!productId }
+  });
+  const addFavorite = useAddFavorite();
+  const removeFavorite = useRemoveFavorite();
 
   const [qty, setQty] = useState(1);
   const [imgIdx, setImgIdx] = useState(0);
+  const [isFavorited, setIsFavorited] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: "", body: "", orderId: "" });
   const [showReviewForm, setShowReviewForm] = useState(false);
+
+  useEffect(() => {
+    setIsFavorited(favoriteStatus?.isFavorited ?? false);
+  }, [favoriteStatus]);
+
+  const handleToggleFavorite = () => {
+    if (!currentUser) { navigate("/auth"); return; }
+
+    if (isFavorited) {
+      removeFavorite.mutate({ productId }, {
+        onSuccess: () => {
+          setIsFavorited(false);
+          qc.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+          toast.success("Removed from favorites");
+        },
+        onError: () => toast.error("Failed to remove from favorites"),
+      });
+    } else {
+      addFavorite.mutate({ data: { productId } }, {
+        onSuccess: () => {
+          setIsFavorited(true);
+          qc.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+          toast.success("Added to favorites!");
+        },
+        onError: () => toast.error("Failed to add to favorites"),
+      });
+    }
+  };
 
   const deliveredOrders = ordersData?.orders?.filter((o) => o.status === "DELIVERED") ?? [];
   const hasPurchased = deliveredOrders.some((o) =>
@@ -67,7 +127,7 @@ export function ProductDetailPage() {
       onSuccess: () => {
         toast.success("Review submitted!");
         setShowReviewForm(false);
-        qc.invalidateQueries({ queryKey: getListReviewsQueryKey(productId) });
+        qc.invalidateQueries({ queryKey: getGetProductReviewsQueryKey(productId) });
       },
       onError: () => toast.error("Failed to submit review"),
     });
@@ -99,8 +159,8 @@ export function ProductDetailPage() {
   const images = product.images && product.images.length > 0
     ? product.images
     : ["https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=600"];
-  const discountPct = product.comparePrice && product.comparePrice > product.price
-    ? Math.round((1 - product.price / product.comparePrice) * 100) : null;
+  const discountPct = (product as any).actualPrice && (product as any).actualPrice > product.sellingPrice
+    ? Math.round((1 - product.sellingPrice / (product as any).actualPrice) * 100) : null;
   const avgRating = reviews?.length
     ? reviews.reduce((s: number, r: Review) => s + r.rating, 0) / reviews.length : 0;
 
@@ -131,8 +191,14 @@ export function ProductDetailPage() {
         <div className="flex flex-col">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h1 className="text-2xl font-bold leading-tight">{product.name}</h1>
-            <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-red-500">
-              <Heart className="w-5 h-5" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`shrink-0 cursor-pointer ${isFavorited ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"}`}
+              onClick={handleToggleFavorite}
+              disabled={addFavorite.isPending || removeFavorite.isPending}
+            >
+              <Heart className={`w-5 h-5 ${isFavorited ? "fill-red-500" : ""}`} />
             </Button>
           </div>
 
@@ -148,9 +214,9 @@ export function ProductDetailPage() {
           )}
 
           <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl font-bold text-primary">{formatPrice(product.price)}</span>
-            {product.comparePrice && product.comparePrice > product.price && (
-              <span className="text-lg line-through text-muted-foreground">{formatPrice(product.comparePrice)}</span>
+            <span className="text-3xl font-bold text-primary">{formatPrice(product.sellingPrice)}</span>
+            {(product as any).actualPrice && (product as any).actualPrice > product.sellingPrice && (
+              <span className="text-lg line-through text-muted-foreground">{formatPrice((product as any).actualPrice)}</span>
             )}
           </div>
 
@@ -247,7 +313,7 @@ export function ProductDetailPage() {
             <p className="text-muted-foreground text-sm py-8 text-center">No reviews yet. Be the first!</p>
           ) : (
             <div className="space-y-4">
-              {reviews.map((r: Review) => (
+              {reviews?.map((r: Review) => (
                 <div key={r.id} className="bg-card border rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">

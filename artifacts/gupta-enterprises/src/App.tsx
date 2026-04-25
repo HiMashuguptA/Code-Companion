@@ -1,8 +1,9 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/contexts/FirebaseContext";
+import { AuthProvider, useAuth } from "@/contexts/FirebaseContext";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { Navbar } from "@/components/Navbar";
 
@@ -14,6 +15,7 @@ import { CheckoutPage } from "@/pages/CheckoutPage";
 import { OrdersPage } from "@/pages/OrdersPage";
 import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { FavoritesPage } from "@/pages/FavoritesPage";
 import { AuthPage } from "@/pages/AuthPage";
 import { DeliveryPortal } from "@/pages/DeliveryPortal";
 
@@ -21,21 +23,44 @@ import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
 import { AdminOrders } from "@/pages/admin/AdminOrders";
 import { AdminProducts } from "@/pages/admin/AdminProducts";
+import { AdminCategories } from "@/pages/admin/AdminCategories";
 import { AdminCoupons } from "@/pages/admin/AdminCoupons";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
 
 import NotFound from "@/pages/not-found";
 
 // Point API client to backend
-const origin = window.location.origin;
-const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-setBaseUrl(`${origin}${basePath}/api`);
+const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+setBaseUrl(apiUrl);
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
-      staleTime: 30_000,
+      retry: (failureCount, error: unknown) => {
+        try {
+          // Don't retry on auth errors (401, 403)
+          const apiError = error as any;
+          if (apiError?.status === 401 || apiError?.status === 403) {
+            console.log("🚫 Not retrying on auth error (401/403)");
+            return false;
+          }
+          // Don't retry network errors beyond initial attempt
+          if (apiError?.message?.includes("Network") || apiError?.message?.includes("fetch")) {
+            return failureCount < 1;
+          }
+        } catch (e) {
+          // If error checking fails, don't retry
+          return false;
+        }
+        // Don't retry at all by default - data is already cached
+        return false;
+      },
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchInterval: undefined,
     },
   },
 });
@@ -55,6 +80,7 @@ function Router() {
       <Route path="/orders" component={OrdersPage} />
       <Route path="/orders/:orderId" component={OrderDetailPage} />
       <Route path="/profile" component={ProfilePage} />
+      <Route path="/favorites" component={FavoritesPage} />
       <Route path="/delivery" component={DeliveryPortal} />
 
       {/* Admin Routes */}
@@ -70,6 +96,9 @@ function Router() {
       <Route path="/admin/products">
         <AdminLayout><AdminProducts /></AdminLayout>
       </Route>
+      <Route path="/admin/categories">
+        <AdminLayout><AdminCategories /></AdminLayout>
+      </Route>
       <Route path="/admin/coupons">
         <AdminLayout><AdminCoupons /></AdminLayout>
       </Route>
@@ -82,12 +111,28 @@ function Router() {
   );
 }
 
+function LogoutHandler() {
+  const { currentUser, isLoading } = useAuth();
+  const [location, navigate] = useLocation();
+  
+  // Handle logout redirect (when currentUser becomes null after being logged in)
+  useEffect(() => {
+    if (!isLoading && currentUser === null && location !== "/auth" && location !== "/") {
+      console.log("📍 User logged out, redirecting to home");
+      navigate("/");
+    }
+  }, [currentUser, isLoading, location, navigate]);
+
+  return null;
+}
+
 function AppShell() {
   return (
     <Switch>
       <Route path="/auth">{() => <AuthPage />}</Route>
       <Route>{() => (
         <div className="min-h-screen flex flex-col">
+          <LogoutHandler />
           <Navbar />
           <main className="flex-1">
             <Router />

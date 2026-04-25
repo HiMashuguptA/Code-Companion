@@ -218,6 +218,30 @@ html {
   overflow: hidden;
 }
 
+/* Cursor pointer on interactive elements */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+select,
+textarea,
+[role="button"],
+[role="menuitem"],
+[role="tab"],
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Cursor not-allowed for disabled elements */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[disabled] {
+  cursor: not-allowed;
+}
+
 .line-clamp-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;

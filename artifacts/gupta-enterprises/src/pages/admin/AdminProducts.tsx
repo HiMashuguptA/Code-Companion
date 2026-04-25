@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Edit2, Trash2, Package, Search } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Edit2, Trash2, Package, Search, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,8 @@ import {
   getListProductsQueryKey, getListCategoriesQueryKey
 } from "@workspace/api-client-react";
 import type { Product, Category } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/FirebaseContext";
+import { useLocation } from "wouter";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,31 +20,28 @@ import { useQueryClient } from "@tanstack/react-query";
 type ProductForm = {
   name: string;
   description: string;
-  price: number;
-  comparePrice: number | undefined;
+  actualPrice: number;
+  sellingPrice: number;
   stock: number;
   categoryId: string;
-  brand: string;
-  sku: string;
-  isActive: boolean;
   images: string[];
 };
 
 const defaultForm: ProductForm = {
   name: "",
   description: "",
-  price: 0,
-  comparePrice: undefined,
+  actualPrice: 0,
+  sellingPrice: 0,
   stock: 0,
   categoryId: "",
-  brand: "",
-  sku: "",
-  isActive: true,
   images: [],
 };
 
 export function AdminProducts() {
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const { currentUser, isLoading: authLoading } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductForm>(defaultForm);
@@ -50,10 +49,20 @@ export function AdminProducts() {
   const [imageInput, setImageInput] = useState("");
 
   const { data: productsData, isLoading } = useListProducts({}, {
-    query: { queryKey: getListProductsQueryKey({}) }
+    query: { 
+      queryKey: getListProductsQueryKey({}),
+      refetchInterval: 2000, // Auto-refetch every 2 seconds for real-time updates
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true
+    }
   });
   const { data: categories } = useListCategories({
-    query: { queryKey: getListCategoriesQueryKey() }
+    query: { 
+      queryKey: getListCategoriesQueryKey(), 
+      retry: false,
+      refetchInterval: 2000 // Auto-refetch for real-time category updates
+    }
   });
 
   const createProduct = useCreateProduct();
@@ -67,18 +76,15 @@ export function AdminProducts() {
     setOpen(true);
   };
 
-  const openEdit = (p: Product) => {
+  const openEdit = (p: Product & {actualPrice?: number}) => {
     setEditProduct(p);
     setForm({
       name: p.name,
       description: p.description ?? "",
-      price: p.price,
-      comparePrice: p.comparePrice,
+      actualPrice: p.actualPrice ?? p.sellingPrice,
+      sellingPrice: p.sellingPrice,
       stock: p.stock ?? 0,
       categoryId: p.categoryId ?? "",
-      brand: p.brand ?? "",
-      sku: p.sku ?? "",
-      isActive: p.isActive ?? true,
       images: p.images ?? [],
     });
     setImageInput("");
@@ -86,39 +92,56 @@ export function AdminProducts() {
   };
 
   const handleSave = () => {
-    if (!form.name || form.price <= 0) {
-      toast.error("Please fill in the required fields"); return;
+    if (!form.name?.trim()) {
+      toast.error("Product name is required");
+      return;
+    }
+    if (!form.description?.trim()) {
+      toast.error("Product description is required");
+      return;
+    }
+    if (form.actualPrice <= 0) {
+      toast.error("Actual price must be greater than 0");
+      return;
+    }
+    if (form.sellingPrice <= 0) {
+      toast.error("Selling price must be greater than 0");
+      return;
     }
     const data = {
-      name: form.name,
-      description: form.description || undefined,
-      price: form.price,
-      comparePrice: form.comparePrice,
+      name: form.name.trim(),
+      description: form.description.trim(),
+      actualPrice: form.actualPrice,
+      sellingPrice: form.sellingPrice,
       stock: form.stock,
       categoryId: form.categoryId || undefined,
-      brand: form.brand || undefined,
-      sku: form.sku || undefined,
-      isActive: form.isActive,
-      images: form.images.length > 0 ? form.images : undefined,
+      images: form.images,
     };
 
     if (editProduct) {
-      updateProduct.mutate({ productId: editProduct.id, data }, {
+      updateProduct.mutate({ productId: editProduct.id, data: data as any }, {
         onSuccess: () => {
           toast.success("Product updated");
           setOpen(false);
           qc.invalidateQueries({ queryKey: getListProductsQueryKey({}) });
         },
-        onError: () => toast.error("Failed to update product"),
+        onError: (error) => {
+          console.error("Update error:", error);
+          toast.error("Failed to update product");
+        },
       });
     } else {
-      createProduct.mutate({ data }, {
+      createProduct.mutate({ data: data as any }, {
         onSuccess: () => {
           toast.success("Product created");
           setOpen(false);
+          setForm(defaultForm);
           qc.invalidateQueries({ queryKey: getListProductsQueryKey({}) });
         },
-        onError: () => toast.error("Failed to create product"),
+        onError: (error) => {
+          console.error("Create error:", error);
+          toast.error("Failed to create product");
+        },
       });
     }
   };
@@ -141,10 +164,92 @@ export function AdminProducts() {
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.currentTarget.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      // Validate that it's an image
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name} is not an image`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // Compress image
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // Scale down if too large
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to compressed base64
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          setForm(f => ({ ...f, images: [...f.images, compressedDataUrl] }));
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => {
+        toast.error(`Failed to read ${file.name}`);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const products = productsData?.products ?? [];
   const filtered = products.filter((p: Product) =>
     !search || p.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Show skeleton while auth is loading
+  if (authLoading) return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <Skeleton className="h-10 w-full mb-4" />
+      <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+    </div>
+  );
+
+  // Show sign in message if not authenticated
+  if (!currentUser) {
+    return (
+      <div className="text-center py-16">
+        <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+        <p className="text-muted-foreground mb-4">You need to sign in as an admin to access this page</p>
+        <Button onClick={() => navigate("/auth")}>Sign In</Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -181,14 +286,11 @@ export function AdminProducts() {
                   className="w-full h-full object-cover"
                   onError={e => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=300"; }}
                 />
-                <div className="absolute top-2 right-2 flex gap-1">
-                  {!p.isActive && <Badge variant="outline" className="text-xs bg-background/80">Inactive</Badge>}
-                </div>
               </div>
               <div className="p-3">
                 <p className="font-medium text-sm line-clamp-2 mb-1">{p.name}</p>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-primary">{formatPrice(p.price)}</span>
+                  <span className="font-bold text-primary">{formatPrice(p.sellingPrice)}</span>
                   <span className="text-xs text-muted-foreground">Stock: {p.stock}</span>
                 </div>
                 <div className="flex gap-1.5">
@@ -225,17 +327,17 @@ export function AdminProducts() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-muted-foreground">Price (₹) *</Label>
+                <Label className="text-xs text-muted-foreground">Actual Price (₹) *</Label>
                 <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="99" value={form.price || ""}
-                  onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} />
+                  placeholder="199" value={form.actualPrice || ""}
+                  onChange={e => setForm(f => ({ ...f, actualPrice: parseFloat(e.target.value) || 0 }))} />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Compare Price (₹)</Label>
+                <Label className="text-xs text-muted-foreground">Selling Price (₹) *</Label>
                 <input type="number" className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="149"
-                  value={form.comparePrice ?? ""}
-                  onChange={e => setForm(f => ({ ...f, comparePrice: e.target.value ? parseFloat(e.target.value) : undefined }))} />
+                  placeholder="99"
+                  value={form.sellingPrice || ""}
+                  onChange={e => setForm(f => ({ ...f, sellingPrice: parseFloat(e.target.value) || 0 }))} />
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Stock</Label>
@@ -251,27 +353,35 @@ export function AdminProducts() {
                   {categories?.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Brand</Label>
-                <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="Classmate" value={form.brand}
-                  onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">SKU</Label>
-                <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="SKU-001" value={form.sku}
-                  onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} />
-              </div>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Images (URLs)</Label>
-              <div className="flex gap-2 mt-1">
-                <input className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="https://example.com/image.jpg"
-                  value={imageInput} onChange={e => setImageInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addImage()} />
-                <Button type="button" variant="outline" size="sm" onClick={addImage}>Add</Button>
+              <Label className="text-xs text-muted-foreground">Images (URLs or Files)</Label>
+              <div className="space-y-2 mt-1">
+                <div className="flex gap-2">
+                  <input className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="https://example.com/image.jpg"
+                    value={imageInput} onChange={e => setImageInput(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addImage()} />
+                  <Button type="button" variant="outline" size="sm" onClick={addImage}>Add URL</Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-1"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="w-3 h-3" />
+                    Upload
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
               </div>
               {form.images.length > 0 && (
                 <div className="flex gap-2 mt-2 flex-wrap">
@@ -284,11 +394,6 @@ export function AdminProducts() {
                   ))}
                 </div>
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="isActiveProduct" checked={form.isActive}
-                onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="accent-primary" />
-              <Label htmlFor="isActiveProduct" className="cursor-pointer">Active (visible to customers)</Label>
             </div>
             <div className="flex gap-2 pt-2">
               <Button onClick={handleSave} disabled={createProduct.isPending || updateProduct.isPending} className="flex-1">

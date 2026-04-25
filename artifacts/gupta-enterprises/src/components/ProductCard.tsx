@@ -1,12 +1,14 @@
 import { Link } from "wouter";
-import { ShoppingCart, Star } from "lucide-react";
+import { ShoppingCart, Star, Heart } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useAddToCart } from "@workspace/api-client-react";
+import { useAddToCart, useCheckFavorite, useAddFavorite, useRemoveFavorite } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Product {
   id: string;
@@ -29,6 +31,17 @@ interface ProductCardProps {
 export function ProductCard({ product, index = 0 }: ProductCardProps) {
   const { currentUser } = useAuth();
   const addToCart = useAddToCart();
+  const { data: favoriteStatus } = useCheckFavorite(product.id, {
+    query: { enabled: !!currentUser }
+  });
+  const addFavorite = useAddFavorite();
+  const removeFavorite = useRemoveFavorite();
+  const [isFavorited, setIsFavorited] = useState(false);
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    setIsFavorited(favoriteStatus?.isFavorited ?? false);
+  }, [favoriteStatus]);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -43,6 +56,34 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
         onError: () => toast.error("Failed to add to cart"),
       }
     );
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!currentUser) {
+      toast.error("Please sign in to save products");
+      return;
+    }
+
+    if (isFavorited) {
+      removeFavorite.mutate({ productId: String(product.id) }, {
+        onSuccess: () => {
+          setIsFavorited(false);
+          qc.invalidateQueries({ queryKey: ["checkFavorite", product.id] });
+          qc.invalidateQueries({ queryKey: ["listFavorites"] });
+        },
+        onError: () => toast.error("Failed to remove from favorites"),
+      });
+    } else {
+      addFavorite.mutate({ data: { productId: String(product.id) } }, {
+        onSuccess: () => {
+          setIsFavorited(true);
+          qc.invalidateQueries({ queryKey: ["checkFavorite", product.id] });
+          qc.invalidateQueries({ queryKey: ["listFavorites"] });
+        },
+        onError: () => toast.error("Failed to save product"),
+      });
+    }
   };
 
   return (
@@ -66,6 +107,15 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
                 {product.discount}% OFF
               </Badge>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 bg-white/80 hover:bg-white text-muted-foreground hover:text-red-500 cursor-pointer"
+              onClick={handleToggleFavorite}
+              disabled={addFavorite.isPending || removeFavorite.isPending}
+            >
+              <Heart className={`w-4 h-4 ${isFavorited ? "fill-red-500 text-red-500" : ""}`} />
+            </Button>
             {product.stock === 0 && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                 <Badge variant="secondary" className="text-sm">Out of Stock</Badge>

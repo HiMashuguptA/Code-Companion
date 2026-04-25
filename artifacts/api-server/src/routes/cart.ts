@@ -69,6 +69,14 @@ router.put("/:itemId", authenticateUser, async (req: AuthRequest, res) => {
     if (parsed.data.quantity <= 0) {
       items.splice(idx, 1);
     } else {
+      // Validate stock when updating quantity
+      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(items[idx]!.productId)));
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      if ((product.stock ?? 0) < parsed.data.quantity) {
+        return res.status(400).json({ 
+          error: `Insufficient stock for this product. Available: ${product.stock ?? 0}, Requested: ${parsed.data.quantity}` 
+        });
+      }
       items[idx]!.quantity = parsed.data.quantity;
     }
 

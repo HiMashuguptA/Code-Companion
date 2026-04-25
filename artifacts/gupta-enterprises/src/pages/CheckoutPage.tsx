@@ -37,11 +37,23 @@ export function CheckoutPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: cart } = useGetCart({ query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser } });
+  const { data: cart } = useGetCart({ 
+    query: { 
+      queryKey: getGetCartQueryKey(), 
+      enabled: !!currentUser,
+      retry: false,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    } 
+  });
   const createOrder = useCreateOrder();
 
   const [deliveryType, setDeliveryType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
   const [address, setAddress] = useState({ street: "", city: "Kohima", state: "Nagaland", pincode: "797001", lat: 0, lng: 0 });
+  const [contactDetails, setContactDetails] = useState({ name: "", phone: "" });
   const [mapPos, setMapPos] = useState<[number, number]>([SHOP_CONFIG.lat, SHOP_CONFIG.lng]);
   const [markerSet, setMarkerSet] = useState(false);
   const [deliverable, setDeliverable] = useState<boolean | null>(null);
@@ -79,6 +91,12 @@ export function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
+    if (!contactDetails.name || !contactDetails.phone) {
+      toast.error("Please provide your name and phone number"); return;
+    }
+    if (!/^[6-9]\d{9}$/.test(contactDetails.phone)) {
+      toast.error("Please enter a valid 10-digit phone number"); return;
+    }
     if (deliveryType === "DELIVERY") {
       if (!address.street || !address.city || !address.pincode) {
         toast.error("Please fill in all address fields"); return;
@@ -94,6 +112,10 @@ export function CheckoutPage() {
     const orderData = {
       deliveryType,
       paymentMethod,
+      contactDetails: {
+        name: contactDetails.name,
+        phone: contactDetails.phone,
+      },
       ...(deliveryType === "DELIVERY" && {
         deliveryAddress: {
           id: `addr-${Date.now()}`,
@@ -166,6 +188,36 @@ export function CheckoutPage() {
                   <span className="text-xs text-muted-foreground text-center">{sub}</span>
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* Contact Details */}
+          <section className="bg-card border rounded-xl p-5">
+            <h2 className="font-semibold mb-4">Contact Information</h2>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="name" className="text-sm">Full Name *</Label>
+                <input 
+                  id="name"
+                  type="text" 
+                  placeholder="Enter your full name" 
+                  value={contactDetails.name}
+                  onChange={(e) => setContactDetails(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone" className="text-sm">Phone Number *</Label>
+                <input 
+                  id="phone"
+                  type="tel" 
+                  placeholder="10-digit phone number (6-9)" 
+                  value={contactDetails.phone}
+                  onChange={(e) => setContactDetails(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="text-xs text-muted-foreground mt-1">This number will be shared with the delivery agent</p>
+              </div>
             </div>
           </section>
 

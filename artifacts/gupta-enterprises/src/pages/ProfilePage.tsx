@@ -11,11 +11,11 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function ProfilePage() {
-  const { currentUser, dbUser, signOut } = useAuth();
+  const { currentUser, dbUser, signOut, isLoading: authLoading } = useAuth();
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useGetProfile({
-    query: { queryKey: getGetProfileQueryKey(), enabled: !!currentUser }
+    query: { queryKey: getGetProfileQueryKey(), enabled: !!currentUser, retry: false }
   });
   const updateProfile = useUpdateProfile();
 
@@ -41,6 +41,16 @@ export function ProfilePage() {
     });
   };
 
+  // Show skeleton while auth is loading
+  if (authLoading || isLoading) return (
+    <div className="container mx-auto px-4 py-8 max-w-lg">
+      <Skeleton className="h-8 w-32 mb-6" />
+      <Skeleton className="h-32 w-full rounded-2xl mb-4" />
+      <Skeleton className="h-48 w-full rounded-2xl" />
+    </div>
+  );
+
+  // Show sign in page only after auth loading completes and no user
   if (!currentUser) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -49,14 +59,6 @@ export function ProfilePage() {
       </div>
     );
   }
-
-  if (isLoading) return (
-    <div className="container mx-auto px-4 py-8 max-w-lg">
-      <Skeleton className="h-8 w-32 mb-6" />
-      <Skeleton className="h-32 w-full rounded-2xl mb-4" />
-      <Skeleton className="h-48 w-full rounded-2xl" />
-    </div>
-  );
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-lg">

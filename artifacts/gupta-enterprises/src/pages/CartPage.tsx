@@ -17,18 +17,30 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export function CartPage() {
   const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [couponCode, setCouponCode] = useState("");
   const queryClient = useQueryClient();
 
   const { data: cart, isLoading } = useGetCart({
-    query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser }
+    query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false }
   });
   const updateItem = useUpdateCartItem();
   const removeItem = useRemoveCartItem();
   const clearCart = useClearCart();
   const applyCoupon = useApplyCoupon();
 
+  // Show skeleton while auth is loading
+  if (authLoading || isLoading) return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <Skeleton className="h-8 w-32 mb-6" />
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    </div>
+  );
+
+  // Show sign in page only after auth loading completes and no user
   if (!currentUser) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -38,16 +50,6 @@ export function CartPage() {
       </div>
     );
   }
-
-  if (isLoading) return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <Skeleton className="h-8 w-32 mb-6" />
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
-    </div>
-  );
 
   const items = cart?.items ?? [];
 

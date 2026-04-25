@@ -50,6 +50,21 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
     const cartItems = cart.items as Array<{ id: string; productId: string; quantity: number; price: number }>;
     if (cartItems.length === 0) return res.status(400).json({ error: "Cart is empty" });
 
+    // Validate stock for all items before creating order
+    const productsToDecrement = [];
+    for (const item of cartItems) {
+      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(item.productId)));
+      if (!product) {
+        return res.status(400).json({ error: `Product ${item.productId} not found` });
+      }
+      if ((product.stock ?? 0) < item.quantity) {
+        return res.status(400).json({ 
+          error: `Insufficient stock for "${product.name}". Available: ${product.stock ?? 0}, Requested: ${item.quantity}` 
+        });
+      }
+      productsToDecrement.push({ productId: parseInt(item.productId), quantity: item.quantity });
+    }
+
     const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let couponDiscount = 0;
     const couponCode = cart.couponCode as string | null;
@@ -76,6 +91,7 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       status: "PENDING",
       deliveryType: parsed.data.deliveryType,
       deliveryAddress: parsed.data.deliveryAddress ?? null,
+      contactDetails: parsed.data.contactDetails ?? null,
       subtotal: String(subtotal),
       discount: "0",
       couponDiscount: String(couponDiscount),
@@ -87,13 +103,21 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       estimatedDelivery,
     }).returning();
 
+    // Decrement stock for all products
+    for (const { productId, quantity } of productsToDecrement) {
+      await db.update(productsTable)
+        .set({ stock: sql`${productsTable.stock} - ${quantity}` })
+        .where(eq(productsTable.id, productId));
+    }
+
     // Create tracking entry
-    await db.insert(trackingTable).values({
+    const trackingPayload: typeof trackingTable.$inferInsert = {
       orderId: order!.id,
-      destinationLat: (parsed.data.deliveryAddress as Record<string, number> | null)?.lat ?? null,
-      destinationLng: (parsed.data.deliveryAddress as Record<string, number> | null)?.lng ?? null,
+      destinationLat: parsed.data.deliveryAddress?.lat ? String(parsed.data.deliveryAddress.lat) : null,
+      destinationLng: parsed.data.deliveryAddress?.lng ? String(parsed.data.deliveryAddress.lng) : null,
       history: [{ status: "PENDING", message: "Order placed successfully", timestamp: new Date() }],
-    });
+    };
+    await db.insert(trackingTable).values(trackingPayload);
 
     // Clear cart
     await db.update(cartsTable).set({ items: [], couponCode: null }).where(eq(cartsTable.userId, req.userId!));
@@ -130,7 +154,8 @@ router.get("/delivery-agent", authenticateUser, requireDeliveryAgent, async (req
 
 // Get single order
 router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.orderId!);
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
 
   try {
@@ -150,7 +175,8 @@ router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
 
 // Update order status
 router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.orderId!);
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
 
   const parsed = UpdateOrderBody.safeParse(req.body);
@@ -199,7 +225,8 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
 
 // Assign delivery agent
 router.post("/:orderId/assign-agent", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.orderId!);
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
 
   const parsed = AssignDeliveryAgentBody.safeParse(req.body);

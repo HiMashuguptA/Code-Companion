@@ -1,15 +1,17 @@
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, MapPin, Package, Phone, Truck } from "lucide-react";
+import { ArrowLeft, MapPin, Package, Phone, Truck, Navigation, Clock, Download, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { useGetOrder, useGetOrderTracking, useUpdateOrder } from "@workspace/api-client-react";
+import { useGetOrder, useGetOrderTracking, useUpdateOrder, getGetOrderQueryKey, getGetOrderTrackingQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice, formatDateTime, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
+import { downloadInvoicePDF, printInvoice } from "@/lib/invoice-generator";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 const markerIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -26,11 +28,44 @@ const ORDER_STEPS = [
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, dbUser } = useAuth();
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
 
-  const { data: order, isLoading, refetch } = useGetOrder(orderId!, { query: { enabled: !!orderId } });
-  const { data: tracking } = useGetOrderTracking(orderId!, { query: { enabled: !!orderId && order?.status === "OUT_FOR_DELIVERY" } });
-  const cancelOrder = useUpdateOrder(orderId!);
+  // Only call hooks when orderId is available from route and user is authenticated
+  const { data: order, isLoading, isError, error, refetch } = useGetOrder(orderId ?? "", { 
+    query: { 
+      queryKey: orderId ? getGetOrderQueryKey(orderId) : [],
+      enabled: !!orderId && !!currentUser,
+      retry: false
+    } 
+  });
+  const { data: tracking } = useGetOrderTracking(orderId ?? "", { 
+    query: { 
+      queryKey: orderId ? getGetOrderTrackingQueryKey(orderId) : [],
+      enabled: !!orderId && !!order?.deliveryAgentId,
+      refetchInterval: 3000, // Auto-refetch every 3 seconds for real-time updates
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true
+    } 
+  });
+  const cancelOrder = useUpdateOrder();
+
+  // Calculate time remaining
+  const timeRemaining = useMemo(() => {
+    if (!order?.estimatedDelivery) return null;
+    const now = new Date().getTime();
+    const estimated = new Date(order.estimatedDelivery).getTime();
+    const diff = estimated - now;
+    
+    if (diff <= 0) return "Delivered soon";
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  }, [order?.estimatedDelivery]);
 
   if (!currentUser) {
     return (
@@ -40,7 +75,8 @@ export function OrderDetailPage() {
     );
   }
 
-  if (isLoading) {
+  // Show loading skeleton while waiting for orderId or data
+  if (!orderId || isLoading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         <Skeleton className="h-8 w-48 mb-6" />
@@ -49,6 +85,20 @@ export function OrderDetailPage() {
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
         </div>
+      </div>
+    );
+  }
+
+  // Handle error state
+  if (isError) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h2 className="text-xl font-semibold mb-2 text-destructive">Failed to load order</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          {(error as any)?.data?.error || "An error occurred while fetching the order"}
+        </p>
+        <Button onClick={() => refetch()}>Try Again</Button>
+        <Button variant="outline" onClick={() => navigate("/orders")} className="ml-2">My Orders</Button>
       </div>
     );
   }
@@ -64,10 +114,74 @@ export function OrderDetailPage() {
   const canCancel = ["PENDING", "CONFIRMED"].includes(order.status);
 
   const handleCancel = () => {
-    cancelOrder.mutate({ data: { status: "CANCELLED" } }, {
+    if (!orderId) return;
+    cancelOrder.mutate({ orderId, data: { status: "CANCELLED" } }, {
       onSuccess: () => { toast.success("Order cancelled"); refetch(); },
       onError: (err: unknown) => toast.error((err as { data?: { error?: string } })?.data?.error ?? "Failed to cancel"),
     });
+  };
+
+  const handleDownloadInvoice = async () => {
+    try {
+      setIsGeneratingInvoice(true);
+      const invoiceData = {
+        orderId: order.id.toString(),
+        orderDate: formatDateTime(order.createdAt),
+        customerName: dbUser?.name || "Customer",
+        customerEmail: currentUser?.email || "",
+        customerPhone: dbUser?.phone || "",
+        items: order.items.map((item) => ({
+          id: item.id,
+          name: item.product?.name || "Product",
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        subtotal: order.subtotal,
+        discount: order.discount ?? 0,
+        couponDiscount: order.couponDiscount ?? 0,
+        total: order.total,
+        deliveryAddress: order.deliveryAddress as any,
+        deliveryType: order.deliveryType,
+        estimatedDelivery: order.estimatedDelivery ? formatDateTime(new Date(order.estimatedDelivery)) : undefined,
+      };
+      await downloadInvoicePDF(invoiceData);
+      toast.success("Invoice downloaded successfully");
+    } catch (error) {
+      console.error("Failed to download invoice:", error);
+      toast.error("Failed to download invoice");
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    try {
+      const invoiceData = {
+        orderId: order.id.toString(),
+        orderDate: formatDateTime(order.createdAt),
+        customerName: dbUser?.name || "Customer",
+        customerEmail: currentUser?.email || "",
+        customerPhone: dbUser?.phone || "",
+        items: order.items.map((item) => ({
+          id: item.id,
+          name: item.product?.name || "Product",
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        subtotal: order.subtotal,
+        discount: order.discount ?? 0,
+        couponDiscount: order.couponDiscount ?? 0,
+        total: order.total,
+        deliveryAddress: order.deliveryAddress as any,
+        deliveryType: order.deliveryType,
+        estimatedDelivery: order.estimatedDelivery ? formatDateTime(new Date(order.estimatedDelivery)) : undefined,
+      };
+      printInvoice(invoiceData);
+      toast.success("Print dialog opened");
+    } catch (error) {
+      console.error("Failed to print invoice:", error);
+      toast.error("Failed to print invoice");
+    }
   };
 
   return (
@@ -83,7 +197,7 @@ export function OrderDetailPage() {
             <h1 className="text-xl font-bold">Order #{order.id}</h1>
             <p className="text-sm text-muted-foreground">{formatDateTime(order.createdAt)}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge className={`text-sm px-3 py-1 ${getOrderStatusColor(order.status)}`}>
               {getOrderStatusLabel(order.status)}
             </Badge>
@@ -92,6 +206,27 @@ export function OrderDetailPage() {
                 Cancel
               </Button>
             )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleDownloadInvoice} 
+              disabled={isGeneratingInvoice}
+              className="gap-2"
+              title="Download invoice as PDF"
+            >
+              <Download className="w-4 h-4" />
+              Download Invoice
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handlePrintInvoice}
+              className="gap-2"
+              title="Print invoice"
+            >
+              <Printer className="w-4 h-4" />
+              Print Invoice
+            </Button>
           </div>
         </div>
 
@@ -118,27 +253,92 @@ export function OrderDetailPage() {
         )}
       </div>
 
+      {/* Delivery Agent Info - Show once agent is assigned */}
+      {order.deliveryAgentId && (
+        <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-muted-foreground">Delivery Agent Assigned</p>
+              {tracking?.agentName && (
+                <>
+                  <p className="font-semibold text-base">{tracking.agentName}</p>
+                  {tracking.agentPhone && (
+                    <a 
+                      href={`tel:${tracking.agentPhone}`} 
+                      className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 mt-1"
+                    >
+                      <Phone className="w-4 h-4" />
+                      {tracking.agentPhone}
+                    </a>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Live Tracking Map */}
       {order.status === "OUT_FOR_DELIVERY" && tracking?.currentLat && tracking?.currentLng && (
         <div className="bg-card border rounded-xl p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Truck className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Live Tracking</h2>
-            <Badge className="bg-green-100 text-green-700 animate-pulse">Live</Badge>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-blue-500 animate-pulse" />
+              <h2 className="font-semibold">Live Delivery Tracking</h2>
+              <Badge className="bg-green-100 text-green-700 animate-pulse">Live</Badge>
+            </div>
+            {timeRemaining && (
+              <div className="flex items-center gap-1 text-sm font-medium text-orange-600">
+                <Clock className="w-4 h-4" />
+                {timeRemaining} remaining
+              </div>
+            )}
           </div>
-          <div className="h-52 rounded-xl overflow-hidden">
-            <MapContainer center={[tracking.currentLat, tracking.currentLng]} zoom={14} style={{ height: "100%", width: "100%" }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OpenStreetMap" />
+
+          <div className="h-64 rounded-xl overflow-hidden mb-3 border">
+            <MapContainer 
+              center={[tracking.currentLat, tracking.currentLng]} 
+              zoom={15} 
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap contributors" />
+              
+              {/* Agent Location */}
               <Marker position={[tracking.currentLat, tracking.currentLng]} icon={markerIcon}>
-                <Popup>Delivery Agent</Popup>
+                <Popup>Delivery Agent - {tracking.agentName || "Agent"}</Popup>
               </Marker>
+
+              {/* Destination Location */}
+              {tracking.destinationLat && tracking.destinationLng && (
+                <Marker 
+                  position={[tracking.destinationLat, tracking.destinationLng]}
+                  icon={L.icon({
+                    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+                    iconSize: [32, 41],
+                    iconAnchor: [16, 41],
+                    className: "opacity-50"
+                  })}
+                >
+                  <Popup>Delivery Destination</Popup>
+                </Marker>
+              )}
             </MapContainer>
           </div>
+
+          {/* Agent Info */}
           {tracking.agentName && (
-            <div className="flex items-center gap-2 mt-3 text-sm">
-              <Phone className="w-4 h-4 text-muted-foreground" />
-              <span>Agent: {tracking.agentName}</span>
-              {tracking.agentPhone && <a href={`tel:${tracking.agentPhone}`} className="text-primary hover:underline">{tracking.agentPhone}</a>}
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium">{tracking.agentName}</p>
+              {tracking.agentPhone && (
+                <a 
+                  href={`tel:${tracking.agentPhone}`} 
+                  className="text-sm text-primary hover:underline flex items-center gap-1"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  {tracking.agentPhone}
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -158,9 +358,9 @@ export function OrderDetailPage() {
               />
               <div className="flex-1">
                 <p className="text-sm font-medium">{item.product?.name}</p>
-                <p className="text-xs text-muted-foreground">Qty: {item.quantity} × {formatPrice(item.price)}</p>
+                <p className="text-xs text-muted-foreground">Qty: {item.quantity} × {formatPrice(item.price ?? 0)}</p>
               </div>
-              <p className="font-semibold text-sm">{formatPrice(item.price * item.quantity)}</p>
+              <p className="font-semibold text-sm">{formatPrice((item.price ?? 0) * item.quantity)}</p>
             </div>
           ))}
         </div>
@@ -172,7 +372,7 @@ export function OrderDetailPage() {
           </div>
           {(order.couponDiscount ?? 0) > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Coupon Discount</span><span>-{formatPrice(order.couponDiscount)}</span>
+              <span>Coupon Discount</span><span>-{formatPrice(order.couponDiscount ?? 0)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base">

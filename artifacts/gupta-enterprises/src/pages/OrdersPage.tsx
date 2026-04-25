@@ -4,19 +4,37 @@ import { Package, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGetOrders, getGetOrdersQueryKey } from "@workspace/api-client-react";
+import { useListOrders, getListOrdersQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice, formatDate, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
 
 export function OrdersPage() {
   const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  const { data, isLoading } = useGetOrders({
-    query: { queryKey: getGetOrdersQueryKey(), enabled: !!currentUser }
+  const { data, isLoading } = useListOrders({
+    query: { 
+      queryKey: getListOrdersQueryKey(), 
+      enabled: !!currentUser, 
+      retry: false,
+      refetchInterval: 2000, // Auto-refetch every 2 seconds for real-time updates
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true
+    }
   });
 
+  // Show skeleton while auth is loading
+  if (authLoading || (isLoading && !data)) return (
+    <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <Skeleton className="h-8 w-40 mb-6" />
+      <div className="flex gap-2 flex-wrap mb-6">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}</div>
+      <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
+    </div>
+  );
+
+  // Show sign in page only after auth loading completes and no user
   if (!currentUser) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">

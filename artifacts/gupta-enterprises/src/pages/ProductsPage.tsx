@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { ProductCard } from "@/components/ProductCard";
-import { useListProducts, useListCategories, getListProductsQueryKey } from "@workspace/api-client-react";
+import { useListProducts, useListCategories, getListProductsQueryKey, getListCategoriesQueryKey } from "@workspace/api-client-react";
 
 export function ProductsPage() {
   const [location] = useLocation();
@@ -31,10 +31,29 @@ export function ProductsPage() {
   };
 
   const { data, isLoading } = useListProducts(queryParams, {
-    query: { queryKey: getListProductsQueryKey(queryParams) }
+    query: { 
+      queryKey: getListProductsQueryKey(queryParams),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
 
-  const { data: categories } = useListCategories();
+  const { data: categories } = useListCategories({
+    query: { 
+      queryKey: getListCategoriesQueryKey(),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
+  });
+  
+  // Ensure categories is always an array
+  const categoriesArray = Array.isArray(categories) ? categories : [];
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,15 +77,15 @@ export function ProductsPage() {
         <Label className="text-sm font-medium mb-2 block">Category</Label>
         <div className="flex flex-col gap-1">
           <button
-            className={`text-left text-sm px-3 py-2 rounded-lg transition-colors ${!category ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            className={`text-left text-sm px-3 py-2 rounded-lg transition-colors cursor-pointer ${!category ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             onClick={() => { setCategory(""); setPage(1); }}
           >
             All Categories
           </button>
-          {categories?.map(cat => (
+          {categoriesArray.map(cat => (
             <button
               key={cat.id}
-              className={`text-left text-sm px-3 py-2 rounded-lg transition-colors ${category === cat.slug ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              className={`text-left text-sm px-3 py-2 rounded-lg transition-colors cursor-pointer ${category === cat.slug ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
               onClick={() => { setCategory(cat.slug); setPage(1); }}
             >
               {cat.name}
@@ -180,7 +199,7 @@ export function ProductsPage() {
           {hasFilters && (
             <div className="flex flex-wrap gap-2 mb-4">
               {search && <Badge variant="secondary" className="gap-1">{search} <X className="w-3 h-3 cursor-pointer" onClick={() => setSearch("")} /></Badge>}
-              {category && <Badge variant="secondary" className="gap-1">{categories?.find(c => c.slug === category)?.name ?? category} <X className="w-3 h-3 cursor-pointer" onClick={() => setCategory("")} /></Badge>}
+              {category && <Badge variant="secondary" className="gap-1">{categoriesArray.find(c => c.slug === category)?.name ?? category} <X className="w-3 h-3 cursor-pointer" onClick={() => setCategory("")} /></Badge>}
               {minPrice && <Badge variant="secondary" className="gap-1">Min: ₹{minPrice} <X className="w-3 h-3 cursor-pointer" onClick={() => setMinPrice("")} /></Badge>}
               {maxPrice && <Badge variant="secondary" className="gap-1">Max: ₹{maxPrice} <X className="w-3 h-3 cursor-pointer" onClick={() => setMaxPrice("")} /></Badge>}
               {inStock && <Badge variant="secondary" className="gap-1">In Stock <X className="w-3 h-3 cursor-pointer" onClick={() => setInStock(false)} /></Badge>}
@@ -199,7 +218,7 @@ export function ProductsPage() {
                 </div>
               ))}
             </div>
-          ) : data?.products.length === 0 ? (
+          ) : (data?.products?.length ?? 0) === 0 ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">🔍</div>
               <h3 className="text-lg font-semibold mb-2">No products found</h3>

@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useListUsers, useUpdateUser, getListUsersQueryKey } from "@workspace/api-client-react";
 import type { User as ApiUser } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/FirebaseContext";
+import { useLocation } from "wouter";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,11 +26,16 @@ const roleColors: Record<string, string> = {
 
 export function AdminUsers() {
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [search, setSearch] = useState("");
 
-  const { data: users, isLoading } = useListUsers({
-    query: { queryKey: getListUsersQueryKey() }
+  const { data: usersResponse, isLoading } = useListUsers({}, {
+    query: { queryKey: getListUsersQueryKey(), retry: false }
   });
+
+  // Ensure users is always an array
+  const users = Array.isArray(usersResponse) ? usersResponse : (usersResponse?.users ?? []);
   const updateUser = useUpdateUser();
 
   const handleRoleChange = (userId: string, role: string) => {
@@ -41,11 +48,31 @@ export function AdminUsers() {
     });
   };
 
-  const filtered = (users ?? []).filter((u: ApiUser) =>
+  const filtered = (Array.isArray(users) ? users : []).filter((u: ApiUser) =>
     !search ||
     u.name?.toLowerCase().includes(search.toLowerCase()) ||
     u.email?.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Show skeleton while auth is loading
+  if (authLoading) return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-32 mb-6" />
+      <Skeleton className="h-10 w-full mb-4" />
+      <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
+    </div>
+  );
+
+  // Show sign in message if not authenticated
+  if (!currentUser) {
+    return (
+      <div className="text-center py-16">
+        <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+        <p className="text-muted-foreground mb-4">You need to sign in as an admin to access this page</p>
+        <Button onClick={() => navigate("/auth")}>Sign In</Button>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -5,6 +5,7 @@ import {
   useGetDashboardAnalytics, useGetRevenueAnalytics, useGetOrderStats,
   getGetDashboardAnalyticsQueryKey, getGetRevenueAnalyticsQueryKey, getGetOrderStatsQueryKey
 } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice } from "@/lib/utils";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -12,14 +13,15 @@ import {
 } from "recharts";
 
 export function AdminDashboard() {
+  const { currentUser, isLoading: authLoading } = useAuth();
   const { data: analytics, isLoading } = useGetDashboardAnalytics({
-    query: { queryKey: getGetDashboardAnalyticsQueryKey() }
+    query: { queryKey: getGetDashboardAnalyticsQueryKey(), retry: false }
   });
   const { data: revenue } = useGetRevenueAnalytics({
-    query: { queryKey: getGetRevenueAnalyticsQueryKey() }
+    query: { queryKey: getGetRevenueAnalyticsQueryKey(), retry: false }
   });
   const { data: orderStats } = useGetOrderStats({
-    query: { queryKey: getGetOrderStatsQueryKey() }
+    query: { queryKey: getGetOrderStatsQueryKey(), retry: false }
   });
 
   const stats = [
@@ -29,6 +31,19 @@ export function AdminDashboard() {
     { label: "Total Revenue", value: formatPrice(analytics?.totalRevenue ?? 0), icon: TrendingUp, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", href: "/admin/orders" },
     { label: "Active Coupons", value: analytics?.activeCoupons ?? 0, icon: Tag, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", href: "/admin/coupons" },
   ];
+
+  // Show skeleton while auth loading
+  if (authLoading) {
+    return (
+      <div className="space-y-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

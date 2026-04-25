@@ -7,3 +7,4 @@ export * from "./reviews";
 export * from "./notifications";
 export * from "./tracking";
 export * from "./carts";
+export * from "./favorites";

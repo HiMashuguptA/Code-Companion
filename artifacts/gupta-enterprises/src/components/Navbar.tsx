@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck } from "lucide-react";
+import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { useGetCart, useListNotifications, useMarkAllNotificationsRead, getGetCartQueryKey, getListNotificationsQueryKey } from "@workspace/api-client-react";
@@ -15,10 +16,12 @@ import type { Notification } from "@workspace/api-client-react";
 
 export function Navbar() {
   const [location, navigate] = useLocation();
-  const { currentUser, dbUser, signOut } = useAuth();
+  const { currentUser, dbUser, signOut, refetchProfile } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isRefetching, setIsRefetching] = useState(false);
+  const qc = useQueryClient();
 
   const { data: cart } = useGetCart({
     query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false }
@@ -29,11 +32,25 @@ export function Navbar() {
   const markAllRead = useMarkAllNotificationsRead();
 
   const cartCount = cart?.itemCount ?? 0;
-  const unreadCount = notifications?.filter((n: Notification) => !n.isRead).length ?? 0;
+  // Ensure notifications is always an array
+  const notificationsArray = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = notificationsArray.filter((n: Notification) => !n.isRead).length;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
+  const handleRefreshProfile = async () => {
+    setIsRefetching(true);
+    try {
+      await refetchProfile();
+      console.log("✅ Profile refreshed from navbar");
+    } catch (err) {
+      console.error("❌ Failed to refresh profile:", err);
+    } finally {
+      setIsRefetching(false);
+    }
   };
 
   const navLinks = [
@@ -90,15 +107,24 @@ export function Navbar() {
                   <div className="flex items-center justify-between p-3 border-b">
                     <span className="font-semibold text-sm">Notifications</span>
                     {unreadCount > 0 && (
-                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => markAllRead.mutate(undefined)}>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-xs" 
+                        onClick={() => markAllRead.mutate(undefined, {
+                          onSuccess: () => {
+                            qc.invalidateQueries({ queryKey: getListNotificationsQueryKey() });
+                          }
+                        })}
+                      >
                         Mark all read
                       </Button>
                     )}
                   </div>
                   <ScrollArea className="h-72">
-                    {!notifications?.length ? (
+                    {!notificationsArray.length ? (
                       <p className="text-center text-sm text-muted-foreground py-8">No notifications</p>
-                    ) : notifications.map((n: Notification) => (
+                    ) : notificationsArray.map((n: Notification) => (
                       <div key={n.id} className={`p-3 border-b last:border-0 ${!n.isRead ? "bg-primary/5" : ""}`}>
                         <p className="text-sm font-medium">{n.title}</p>
                         <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
@@ -138,7 +164,13 @@ export function Navbar() {
                     <p className="text-xs text-muted-foreground capitalize">{dbUser?.role?.toLowerCase().replace("_", " ")}</p>
                   </div>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleRefreshProfile} disabled={isRefetching}>
+                    <RotateCw className="w-4 h-4 mr-2" />
+                    {isRefetching ? "Refreshing..." : "Refresh Profile"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/profile")}><User className="w-4 h-4 mr-2" /> Profile</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/favorites")}><Heart className="w-4 h-4 mr-2" /> My Favorites</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/orders")}><Package className="w-4 h-4 mr-2" /> My Orders</DropdownMenuItem>
                   {dbUser?.role === "ADMIN" && (
                     <DropdownMenuItem onClick={() => navigate("/admin")}><LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard</DropdownMenuItem>

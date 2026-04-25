@@ -266,6 +266,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/Category"
 
+  /categories/{categoryId}:
+    put:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update a category (Admin)
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryBody"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "404":
+          description: Category not found
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a category (Admin)
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  id:
+                    type: string
+        "404":
+          description: Category not found
+
   # CART
   /cart:
     get:
@@ -879,6 +930,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/OrderStats"
 
+  # FAVORITES
+  /favorites:
+    get:
+      operationId: listFavorites
+      tags: [favorites]
+      summary: Get user's favorite products
+      responses:
+        "200":
+          description: List of favorite products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: addFavorite
+      tags: [favorites]
+      summary: Add product to favorites
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                productId:
+                  type: string
+              required:
+                - productId
+      responses:
+        "201":
+          description: Added to favorites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  favoriteId:
+                    type: number
+
+  /favorites/{productId}:
+    delete:
+      operationId: removeFavorite
+      tags: [favorites]
+      summary: Remove product from favorites
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed from favorites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /favorites/check/{productId}:
+    get:
+      operationId: checkFavorite
+      tags: [favorites]
+      summary: Check if product is favorited
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Favorite status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isFavorited:
+                    type: boolean
+
 components:
   schemas:
     HealthStatus:
@@ -1026,6 +1162,8 @@ components:
           type: string
         icon:
           type: string
+        image:
+          type: string
         productCount:
           type: integer
       required:
@@ -1100,6 +1238,13 @@ components:
           enum: [DELIVERY, PICKUP]
         deliveryAddress:
           $ref: "#/components/schemas/Address"
+        contactDetails:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
         subtotal:
           type: number
         discount:
@@ -1549,6 +1694,8 @@ components:
           type: string
         icon:
           type: string
+        image:
+          type: string
       required:
         - name
         - slug
@@ -1588,6 +1735,13 @@ components:
           enum: [DELIVERY, PICKUP]
         deliveryAddress:
           $ref: "#/components/schemas/Address"
+        contactDetails:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
         paymentMethod:
           type: string
         notes:
@@ -1598,6 +1752,7 @@ components:
       required:
         - deliveryType
         - paymentMethod
+        - contactDetails
 
     UpdateOrderBody:
       type: object

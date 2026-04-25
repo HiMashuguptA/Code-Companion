@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, couponsTable } from "@workspace/db";
+import { db, couponsTable, usersTable, notificationsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { CreateCouponBody, UpdateCouponBody, ValidateCouponBody } from "@workspace/api-zod";
 import { authenticateUser, requireAdmin, type AuthRequest } from "../middlewares/auth.js";
@@ -66,6 +66,26 @@ router.post("/", authenticateUser, requireAdmin, async (req: AuthRequest, res) =
       usageLimit: parsed.data.usageLimit ?? null,
       expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
     }).returning();
+
+    // Notify all regular users about the new coupon
+    const regularUsers = await db.select({ id: usersTable.id }).from(usersTable)
+      .where(eq(usersTable.role, "USER"));
+
+    const discountText = parsed.data.discountType === "FLAT" 
+      ? `₹${parsed.data.discountValue} off`
+      : `${parsed.data.discountValue}% off`;
+    
+    if (regularUsers.length > 0) {
+      await db.insert(notificationsTable).values(
+        regularUsers.map(user => ({
+          userId: user.id,
+          title: `New Coupon: ${coupon!.code}`,
+          message: `Get ${discountText} on your orders with coupon code "${coupon!.code}"${parsed.data.description ? ` - ${parsed.data.description}` : ''}`,
+          type: "PROMOTION" as const,
+        }))
+      );
+    }
+
     return res.status(201).json(formatCoupon(coupon!));
   } catch (err) {
     req.log.error({ err }, "Failed to create coupon");

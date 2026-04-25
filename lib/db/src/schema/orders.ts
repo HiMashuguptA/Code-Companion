@@ -11,6 +11,7 @@ export const ordersTable = pgTable("orders", {
   }).notNull().default("PENDING"),
   deliveryType: text("delivery_type", { enum: ["DELIVERY", "PICKUP"] }).notNull().default("DELIVERY"),
   deliveryAddress: jsonb("delivery_address"),
+  contactDetails: jsonb("contact_details"), // Store phone and name for delivery agent
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
   discount: numeric("discount", { precision: 10, scale: 2 }).notNull().default("0"),
   couponDiscount: numeric("coupon_discount", { precision: 10, scale: 2 }).notNull().default("0"),

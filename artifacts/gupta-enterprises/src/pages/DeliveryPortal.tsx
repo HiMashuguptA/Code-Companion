@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
-  useGetDeliveryOrders, useUpdateDeliveryLocation, useUpdateOrder,
-  getGetDeliveryOrdersQueryKey
+  useGetDeliveryAgentOrders, useUpdateDeliveryLocation, useUpdateOrder,
+  getGetDeliveryAgentOrdersQueryKey
 } from "@workspace/api-client-react";
 import type { Order } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
@@ -35,7 +35,7 @@ function LiveLocationTracker({ orderId }: { orderId: string }) {
           orderId,
           data: { lat: pos.coords.latitude, lng: pos.coords.longitude }
         }, {
-          onSuccess: () => qc.invalidateQueries({ queryKey: getGetDeliveryOrdersQueryKey() }),
+          onSuccess: () => qc.invalidateQueries({ queryKey: getGetDeliveryAgentOrdersQueryKey() }),
         });
       });
     };
@@ -59,8 +59,16 @@ export function DeliveryPortal() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [manualLoc, setManualLoc] = useState<[number, number] | null>(null);
 
-  const { data: orders, isLoading } = useGetDeliveryOrders({
-    query: { queryKey: getGetDeliveryOrdersQueryKey(), enabled: !!currentUser }
+  const { data: orders, isLoading } = useGetDeliveryAgentOrders({
+    query: { 
+      queryKey: getGetDeliveryAgentOrdersQueryKey(), 
+      enabled: !!currentUser, 
+      retry: false,
+      refetchInterval: 2000, // Auto-refetch every 2 seconds for real-time updates
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true
+    }
   });
 
   const updateLocation = useUpdateDeliveryLocation();
@@ -81,7 +89,7 @@ export function DeliveryPortal() {
     updateOrder.mutate({ orderId, data: { status: "OUT_FOR_DELIVERY" } }, {
       onSuccess: () => {
         toast.success("Order marked as Out for Delivery");
-        qc.invalidateQueries({ queryKey: getGetDeliveryOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDeliveryAgentOrdersQueryKey() });
       },
       onError: () => toast.error("Failed to update order status"),
     });
@@ -92,7 +100,7 @@ export function DeliveryPortal() {
       onSuccess: () => {
         toast.success("Order marked as Delivered");
         setSelectedOrder(null);
-        qc.invalidateQueries({ queryKey: getGetDeliveryOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDeliveryAgentOrdersQueryKey() });
       },
       onError: () => toast.error("Failed to update order status"),
     });
@@ -102,7 +110,7 @@ export function DeliveryPortal() {
     updateLocation.mutate({ orderId, data: { lat, lng } }, {
       onSuccess: () => {
         toast.success("Location updated");
-        qc.invalidateQueries({ queryKey: getGetDeliveryOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDeliveryAgentOrdersQueryKey() });
       },
       onError: () => toast.error("Failed to update location"),
     });
@@ -225,6 +233,21 @@ export function DeliveryPortal() {
                       <Navigation className="w-3 h-3" /> Open in Google Maps
                     </Button>
                   </div>
+
+                  {(selectedOrder as any).contactDetails && (
+                    <div className="p-4 border-b bg-blue-50 dark:bg-blue-950/20">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Customer Contact</p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{(selectedOrder as any).contactDetails.name}</p>
+                        <a 
+                          href={`tel:${(selectedOrder as any).contactDetails.phone}`}
+                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {(selectedOrder as any).contactDetails.phone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

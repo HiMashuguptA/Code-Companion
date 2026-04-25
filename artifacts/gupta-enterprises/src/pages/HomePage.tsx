@@ -22,13 +22,29 @@ export function HomePage() {
   const [, navigate] = useLocation();
 
   const { data: productsData, isLoading: productsLoading } = useListProducts({ limit: 8, sort: "newest" }, {
-    query: { queryKey: getListProductsQueryKey({ limit: 8, sort: "newest" }) }
+    query: { 
+      queryKey: getListProductsQueryKey({ limit: 8, sort: "newest" }),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
   const { data: categories, isLoading: categoriesLoading } = useListCategories({
-    query: { queryKey: getListCategoriesQueryKey() }
+    query: { 
+      queryKey: getListCategoriesQueryKey(),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
   });
 
   const featuredProducts = productsData?.products ?? [];
+  // Ensure categories is an array
+  const categoriesArray = Array.isArray(categories) ? categories : (categories ? [categories] : []);
 
   return (
     <div>
@@ -97,7 +113,7 @@ export function HomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {(categories ?? []).slice(0, 6).map((cat: Category) => (
+            {categoriesArray.slice(0, 6).map((cat: Category) => (
               <Link key={cat.id} href={`/products?category=${cat.id}`}>
                 <div className="bg-card border rounded-xl p-3 text-center hover:shadow-md hover:border-primary/40 transition-all cursor-pointer group">
                   <div className="text-2xl mb-1">{cat.image ?? "📦"}</div>

@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw } from "lucide-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { Button } from "@/components/ui/button";
+import { useState, useMemo } from "react";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -11,20 +12,44 @@ const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/coupons", label: "Coupons", icon: Tag },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
-  const { dbUser } = useAuth();
+  const { dbUser, refetchProfile, isLoading } = useAuth();
+  const [isRefetching, setIsRefetching] = useState(false);
 
-  if (dbUser?.role !== "ADMIN") {
+  // Check access once, don't re-evaluate on every render
+  const hasAdminAccess = useMemo(() => dbUser?.role === "ADMIN", [dbUser?.role]);
+
+  const handleRefreshProfile = async () => {
+    setIsRefetching(true);
+    try {
+      await refetchProfile();
+      console.log("✅ Profile refreshed successfully");
+    } catch (err) {
+      console.error("❌ Failed to refresh profile:", err);
+    } finally {
+      setIsRefetching(false);
+    }
+  };
+
+  if (!hasAdminAccess) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h2 className="text-xl font-bold mb-2">Access Denied</h2>
         <p className="text-muted-foreground mb-4">You don't have permission to access the admin panel.</p>
-        <Button onClick={() => navigate("/")}>Go Home</Button>
+        <p className="text-sm text-muted-foreground mb-6">Current role: <span className="font-medium">{dbUser?.role || "Loading..."}</span></p>
+        <div className="flex gap-2 justify-center">
+          <Button onClick={() => navigate("/")}>Go Home</Button>
+          <Button variant="outline" onClick={handleRefreshProfile} disabled={isRefetching}>
+            <RotateCw className="w-4 h-4 mr-2" />
+            {isRefetching ? "Refreshing..." : "Refresh Profile"}
+          </Button>
+        </div>
       </div>
     );
   }
