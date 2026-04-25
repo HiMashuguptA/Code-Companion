@@ -25,3 +25,22 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Gupta Enterprises (artifacts/gupta-enterprises)
+
+Flipkart-style stationery e-commerce web app for Ashutosh Gupta in Kohima, Nagaland.
+Shop config (address, phone, email, lat/lng, 15km delivery radius) lives in `src/lib/shopConfig.ts`.
+
+Key features in place:
+- Firebase auth with role-based access (USER / ADMIN / DELIVERY_AGENT)
+- Catalog with categories, products, favorites, reviews, cart, coupons
+- Leaflet/OpenStreetMap shop map and delivery-radius checkout
+- Order tracking, admin analytics, notifications
+- Same-day-delivery promo bar in `Navbar`, mutual contact `Footer`
+- `/dashboard` user dashboard, `/refer` referral page
+- Buy Now button on product detail (adds to cart then jumps to checkout)
+- Real-time cart sync via 5s polling on cart page
+- Per-user coupon redemption limit enforced in `cart.ts /apply-coupon`
+- Printable invoice on `OrderDetailPage` via `window.print()`
+
+Generated API client URLs already include the `/api` prefix, so `setBaseUrl(null)` is correct in dev — the proxy serves `/api/*` to api-server on port 8080.

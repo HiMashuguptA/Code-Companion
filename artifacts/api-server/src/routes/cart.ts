@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, cartsTable, productsTable, couponsTable, usersTable } from "@workspace/db";
+import { db, cartsTable, productsTable, couponsTable, usersTable, ordersTable } from "@workspace/db";
 import { eq, and, gte } from "drizzle-orm";
 import { AddToCartBody, UpdateCartItemBody, ApplyCouponBody } from "@workspace/api-zod";
 import { authenticateUser, type AuthRequest } from "../middlewares/auth.js";
@@ -131,8 +131,44 @@ router.post("/apply-coupon", authenticateUser, async (req: AuthRequest, res) => 
       return res.status(400).json({ error: `Minimum order of ₹${coupon.minOrderValue} required` });
     }
 
+    // Per-user coupon usage limit: a coupon can only be redeemed once
+    // per user. We check the user's prior orders for this coupon code.
+    const previousUses = await db
+      .select({ id: ordersTable.id })
+      .from(ordersTable)
+      .where(
+        and(
+          eq(ordersTable.userId, req.userId!),
+          eq(ordersTable.couponCode, parsed.data.code),
+        ),
+      );
+    if (previousUses.length > 0) {
+      return res.status(400).json({
+        error: "You've already used this coupon. One redemption per customer.",
+      });
+    }
+
     if (coupon.isFirstOrder) {
-      // Check if user has any previous orders — simplified check
+      // Coupon valid only on the user's very first order.
+      const anyOrder = await db
+        .select({ id: ordersTable.id })
+        .from(ordersTable)
+        .where(eq(ordersTable.userId, req.userId!))
+        .limit(1);
+      if (anyOrder.length > 0) {
+        return res.status(400).json({
+          error: "This coupon is only valid for your first order.",
+        });
+      }
+    }
+
+    // Honor global usage cap (across all users), if set.
+    if (
+      coupon.usageLimit !== null &&
+      coupon.usageLimit !== undefined &&
+      coupon.usageCount >= coupon.usageLimit
+    ) {
+      return res.status(400).json({ error: "This coupon has reached its usage limit." });
     }
 
     const [updated] = await db.update(cartsTable)

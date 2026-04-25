@@ -22,7 +22,15 @@ export function CartPage() {
   const queryClient = useQueryClient();
 
   const { data: cart, isLoading } = useGetCart({
-    query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false }
+    query: {
+      queryKey: getGetCartQueryKey(),
+      enabled: !!currentUser,
+      retry: false,
+      // Real-time cart sync: poll while user is on cart page so changes
+      // from other tabs/devices appear within a few seconds.
+      refetchInterval: 5000,
+      refetchOnWindowFocus: true,
+    },
   });
   const updateItem = useUpdateCartItem();
   const removeItem = useRemoveCartItem();
