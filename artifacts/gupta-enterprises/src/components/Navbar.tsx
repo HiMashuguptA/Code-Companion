@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart } from "lucide-react";
+import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart, Gift, Phone } from "lucide-react";
+import { SHOP_CONFIG } from "@/lib/shopConfig";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { useGetCart, useListNotifications, useMarkAllNotificationsRead, getGetCartQueryKey, getListNotificationsQueryKey } from "@workspace/api-client-react";
@@ -60,6 +61,18 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Same-day-delivery promo bar */}
+      <div className="bg-gradient-to-r from-saffron-500 via-orange-500 to-amber-500 text-white text-xs">
+        <div className="container mx-auto px-4 py-1.5 flex items-center justify-center gap-2 sm:gap-4 flex-wrap text-center">
+          <span className="flex items-center gap-1 font-medium">
+            <Truck className="w-3.5 h-3.5" /> Same-day delivery in {SHOP_CONFIG.city} · within {SHOP_CONFIG.deliveryRadiusKm}km
+          </span>
+          <span className="hidden sm:inline opacity-70">|</span>
+          <a href={`tel:${SHOP_CONFIG.phone}`} className="hidden sm:flex items-center gap-1 hover:underline">
+            <Phone className="w-3 h-3" /> +91 {SHOP_CONFIG.phone}
+          </a>
+        </div>
+      </div>
       <div className="container mx-auto px-4 h-16 flex items-center gap-4">
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
@@ -169,9 +182,11 @@ export function Navbar() {
                     {isRefetching ? "Refreshing..." : "Refresh Profile"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}><LayoutDashboard className="w-4 h-4 mr-2" /> Dashboard</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/profile")}><User className="w-4 h-4 mr-2" /> Profile</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/favorites")}><Heart className="w-4 h-4 mr-2" /> My Favorites</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/orders")}><Package className="w-4 h-4 mr-2" /> My Orders</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/refer")}><Gift className="w-4 h-4 mr-2" /> Refer & Earn</DropdownMenuItem>
                   {dbUser?.role === "ADMIN" && (
                     <DropdownMenuItem onClick={() => navigate("/admin")}><LayoutDashboard className="w-4 h-4 mr-2" /> Admin Dashboard</DropdownMenuItem>
                   )}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { Star, ShoppingCart, Heart, ArrowLeft, Tag, CheckCircle } from "lucide-react";
+import { Star, ShoppingCart, Heart, ArrowLeft, Tag, CheckCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,6 +116,17 @@ export function ProductDetailPage() {
         toast.success(`${product?.name ?? "Item"} added to cart!`);
       },
       onError: () => toast.error("Failed to add to cart"),
+    });
+  };
+
+  const handleBuyNow = () => {
+    if (!currentUser) { navigate("/auth"); return; }
+    addToCart.mutate({ data: { productId, quantity: qty } }, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetCartQueryKey() });
+        navigate("/checkout");
+      },
+      onError: () => toast.error("Couldn't start checkout. Please try again."),
     });
   };
 
@@ -239,11 +250,26 @@ export function ProductDetailPage() {
             )}
           </div>
 
-          <Button className="gap-2" size="lg" onClick={handleAddToCart}
-            disabled={addToCart.isPending || product.stock === 0}>
-            <ShoppingCart className="w-5 h-5" />
-            {product.stock === 0 ? "Out of Stock" : addToCart.isPending ? "Adding..." : "Add to Cart"}
-          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              className="gap-2 border-primary/40 text-primary hover:bg-primary/5"
+              size="lg"
+              onClick={handleAddToCart}
+              disabled={addToCart.isPending || product.stock === 0}
+            >
+              <ShoppingCart className="w-5 h-5" />
+              {product.stock === 0 ? "Out of Stock" : addToCart.isPending ? "Adding..." : "Add to Cart"}
+            </Button>
+            <Button
+              className="gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md"
+              size="lg"
+              onClick={handleBuyNow}
+              disabled={addToCart.isPending || product.stock === 0}
+            >
+              <Zap className="w-5 h-5 fill-white" /> Buy Now
+            </Button>
+          </div>
 
           {product.stock !== undefined && product.stock <= 5 && product.stock > 0 && (
             <p className="text-xs text-orange-500 mt-2">⚠️ Only {product.stock} left!</p>

@@ -99,7 +99,7 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Categories */}
+      {/* Flipkart-style Categories with images */}
       <section className="container mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold">Shop by Category</h2>
@@ -109,20 +109,45 @@ export function HomePage() {
         </div>
         {categoriesLoading ? (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+            {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {categoriesArray.slice(0, 6).map((cat: Category) => (
               <Link key={cat.id} href={`/products?category=${cat.id}`}>
-                <div className="bg-card border rounded-xl p-3 text-center hover:shadow-md hover:border-primary/40 transition-all cursor-pointer group">
-                  <div className="text-2xl mb-1">{cat.image ?? "📦"}</div>
-                  <p className="text-xs font-medium group-hover:text-primary transition-colors line-clamp-2">{cat.name}</p>
+                <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md hover:border-primary/40 transition-all cursor-pointer group">
+                  <div className="aspect-square bg-muted relative overflow-hidden">
+                    {cat.image && cat.image.startsWith("http") ? (
+                      <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl">{cat.icon ?? "📦"}</div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <p className="absolute bottom-2 left-2 right-2 text-white text-xs font-semibold line-clamp-2 drop-shadow">{cat.name}</p>
+                  </div>
                 </div>
               </Link>
             ))}
           </div>
         )}
+      </section>
+
+      {/* Refer & Earn promo strip */}
+      <section className="container mx-auto px-4 py-3">
+        <Link href="/refer">
+          <div className="bg-gradient-to-r from-saffron-500 via-orange-500 to-amber-500 text-white rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg cursor-pointer hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <span className="text-2xl">🎁</span>
+              </div>
+              <div>
+                <p className="font-bold text-base sm:text-lg leading-tight">Refer a friend, get ₹100 each</p>
+                <p className="text-xs opacity-90 mt-0.5">Share your code · both earn on first order</p>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" className="shrink-0 gap-1">Get Code <ArrowRight className="w-4 h-4" /></Button>
+          </div>
+        </Link>
       </section>
 
       {/* Featured Products */}

@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/FirebaseContext";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 
 import { HomePage } from "@/pages/HomePage";
 import { ProductsPage } from "@/pages/ProductsPage";
@@ -18,6 +19,8 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { FavoritesPage } from "@/pages/FavoritesPage";
 import { AuthPage } from "@/pages/AuthPage";
 import { DeliveryPortal } from "@/pages/DeliveryPortal";
+import { DashboardPage } from "@/pages/DashboardPage";
+import { ReferEarnPage } from "@/pages/ReferEarnPage";
 
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
@@ -81,6 +84,8 @@ function Router() {
       <Route path="/orders/:orderId" component={OrderDetailPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/favorites" component={FavoritesPage} />
+      <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/refer" component={ReferEarnPage} />
       <Route path="/delivery" component={DeliveryPortal} />
 
       {/* Admin Routes */}
@@ -143,6 +148,7 @@ function AppShell() {
           <main className="flex-1">
             <Router />
           </main>
+          <Footer />
         </div>
       )}</Route>
     </Switch>
