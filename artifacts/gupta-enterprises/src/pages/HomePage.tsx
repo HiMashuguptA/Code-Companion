@@ -21,9 +21,9 @@ const shopIcon = L.divIcon({
 export function HomePage() {
   const [, navigate] = useLocation();
 
-  const { data: productsData, isLoading: productsLoading } = useListProducts({ limit: 8, sort: "newest" }, {
+  const { data: productsData, isLoading: productsLoading } = useListProducts({ limit: 8 }, {
     query: { 
-      queryKey: getListProductsQueryKey({ limit: 8, sort: "newest" }),
+      queryKey: getListProductsQueryKey({ limit: 8 }),
       staleTime: 1000 * 60 * 5,
       gcTime: 1000 * 60 * 10,
       refetchOnMount: false,
@@ -143,7 +143,7 @@ export function HomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {featuredProducts.map((p: Product) => <ProductCard key={p.id} product={p} />)}
+            {featuredProducts.map((p: Product) => <ProductCard key={p.id} product={p as never} />)}
           </div>
         )}
       </section>

@@ -3,7 +3,7 @@ import { ShoppingCart, Star, Heart } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useAddToCart, useCheckFavorite, useAddFavorite, useRemoveFavorite } from "@workspace/api-client-react";
+import { useAddToCart, useCheckFavorite, useAddFavorite, useRemoveFavorite, getCheckFavoriteQueryKey, getListFavoritesQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
@@ -32,7 +32,7 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
   const { currentUser } = useAuth();
   const addToCart = useAddToCart();
   const { data: favoriteStatus } = useCheckFavorite(product.id, {
-    query: { enabled: !!currentUser }
+    query: { queryKey: getCheckFavoriteQueryKey(product.id), enabled: !!currentUser }
   });
   const addFavorite = useAddFavorite();
   const removeFavorite = useRemoveFavorite();
@@ -69,8 +69,8 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
       removeFavorite.mutate({ productId: String(product.id) }, {
         onSuccess: () => {
           setIsFavorited(false);
-          qc.invalidateQueries({ queryKey: ["checkFavorite", product.id] });
-          qc.invalidateQueries({ queryKey: ["listFavorites"] });
+          qc.invalidateQueries({ queryKey: getCheckFavoriteQueryKey(product.id) });
+          qc.invalidateQueries({ queryKey: getListFavoritesQueryKey() });
         },
         onError: () => toast.error("Failed to remove from favorites"),
       });
@@ -78,8 +78,8 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
       addFavorite.mutate({ data: { productId: String(product.id) } }, {
         onSuccess: () => {
           setIsFavorited(true);
-          qc.invalidateQueries({ queryKey: ["checkFavorite", product.id] });
-          qc.invalidateQueries({ queryKey: ["listFavorites"] });
+          qc.invalidateQueries({ queryKey: getCheckFavoriteQueryKey(product.id) });
+          qc.invalidateQueries({ queryKey: getListFavoritesQueryKey() });
         },
         onError: () => toast.error("Failed to save product"),
       });

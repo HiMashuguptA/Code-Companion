@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useGetProduct, useGetProductReviews, useListOrders, useAddToCart, useCreateReview,
   useCheckFavorite, useAddFavorite, useRemoveFavorite,
-  getGetProductQueryKey, getGetProductReviewsQueryKey, getListOrdersQueryKey, getGetCartQueryKey
+  getGetProductQueryKey, getGetProductReviewsQueryKey, getListOrdersQueryKey, getGetCartQueryKey,
+  getCheckFavoriteQueryKey, getListFavoritesQueryKey
 } from "@workspace/api-client-react";
 import type { Review } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
@@ -46,7 +47,7 @@ export function ProductDetailPage() {
       refetchOnReconnect: false
     }
   });
-  const { data: ordersData } = useListOrders({
+  const { data: ordersData } = useListOrders(undefined, {
     query: { 
       queryKey: getListOrdersQueryKey(), 
       enabled: !!currentUser,
@@ -62,7 +63,7 @@ export function ProductDetailPage() {
   const addToCart = useAddToCart();
   const createReview = useCreateReview();
   const { data: favoriteStatus } = useCheckFavorite(productId, {
-    query: { enabled: !!currentUser && !!productId }
+    query: { queryKey: getCheckFavoriteQueryKey(productId), enabled: !!currentUser && !!productId }
   });
   const addFavorite = useAddFavorite();
   const removeFavorite = useRemoveFavorite();
@@ -220,13 +221,6 @@ export function ProductDetailPage() {
             )}
           </div>
 
-          {product.tags?.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {product.tags.map((tag: string) => (
-                <Badge key={tag} variant="secondary" className="gap-1"><Tag className="w-3 h-3" />{tag}</Badge>
-              ))}
-            </div>
-          )}
 
           <p className="text-sm text-muted-foreground leading-relaxed mb-6">{product.description}</p>
 
@@ -340,8 +334,8 @@ export function ProductDetailPage() {
         <TabsContent value="details" className="mt-4">
           <div className="bg-card border rounded-xl p-4 text-sm space-y-2">
             <p className="text-muted-foreground leading-relaxed">{product.description}</p>
-            {product.brand && <p><span className="font-medium">Brand:</span> {product.brand}</p>}
-            {product.sku && <p><span className="font-medium">SKU:</span> {product.sku}</p>}
+            {product.category?.name && <p><span className="font-medium">Category:</span> {product.category.name}</p>}
+            <p><span className="font-medium">In Stock:</span> {product.stock} units</p>
           </div>
         </TabsContent>
       </Tabs>

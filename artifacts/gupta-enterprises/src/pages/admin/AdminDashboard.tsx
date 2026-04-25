@@ -14,10 +14,10 @@ import {
 
 export function AdminDashboard() {
   const { currentUser, isLoading: authLoading } = useAuth();
-  const { data: analytics, isLoading } = useGetDashboardAnalytics({
+  const { data: analytics, isLoading } = useGetDashboardAnalytics(undefined, {
     query: { queryKey: getGetDashboardAnalyticsQueryKey(), retry: false }
   });
-  const { data: revenue } = useGetRevenueAnalytics({
+  const { data: revenue } = useGetRevenueAnalytics(undefined, {
     query: { queryKey: getGetRevenueAnalyticsQueryKey(), retry: false }
   });
   const { data: orderStats } = useGetOrderStats({
@@ -29,8 +29,17 @@ export function AdminDashboard() {
     { label: "Total Orders", value: analytics?.totalOrders ?? 0, icon: ShoppingBag, color: "text-saffron-600", bg: "bg-orange-50 dark:bg-orange-900/20", href: "/admin/orders" },
     { label: "Total Products", value: analytics?.totalProducts ?? 0, icon: Package, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20", href: "/admin/products" },
     { label: "Total Revenue", value: formatPrice(analytics?.totalRevenue ?? 0), icon: TrendingUp, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", href: "/admin/orders" },
-    { label: "Active Coupons", value: analytics?.activeCoupons ?? 0, icon: Tag, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", href: "/admin/coupons" },
+    { label: "Pending Orders", value: analytics?.pendingOrders ?? 0, icon: Tag, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", href: "/admin/orders" },
   ];
+
+  const orderStatusData = orderStats ? [
+    { status: "Pending", count: orderStats.pending },
+    { status: "Confirmed", count: orderStats.confirmed },
+    { status: "Processing", count: orderStats.processing },
+    { status: "Out", count: orderStats.outForDelivery },
+    { status: "Delivered", count: orderStats.delivered },
+    { status: "Cancelled", count: orderStats.cancelled },
+  ] : [];
 
   // Show skeleton while auth loading
   if (authLoading) {
@@ -72,11 +81,11 @@ export function AdminDashboard() {
       </div>
 
       {/* Revenue chart */}
-      {revenue?.data && revenue.data.length > 0 && (
+      {revenue && revenue.length > 0 && (
         <div className="bg-card border rounded-xl p-5">
           <h2 className="font-semibold mb-4">Revenue Trend</h2>
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={revenue.data}>
+            <AreaChart data={revenue}>
               <defs>
                 <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(24, 95%, 53%)" stopOpacity={0.3} />
@@ -94,11 +103,11 @@ export function AdminDashboard() {
       )}
 
       {/* Order stats chart */}
-      {orderStats?.data && orderStats.data.length > 0 && (
+      {orderStatusData.length > 0 && (
         <div className="bg-card border rounded-xl p-5">
           <h2 className="font-semibold mb-4">Orders by Status</h2>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={orderStats.data}>
+            <BarChart data={orderStatusData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="status" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
               <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />

@@ -2,7 +2,7 @@ import { Heart, ShoppingBag } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useListFavorites } from "@workspace/api-client-react";
+import { useListFavorites, getListFavoritesQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { ProductCard } from "@/components/ProductCard";
 
@@ -11,7 +11,7 @@ export function FavoritesPage() {
   const { currentUser, isLoading: authLoading } = useAuth();
 
   const { data: favorites = [], isLoading } = useListFavorites({
-    query: { enabled: !!currentUser, retry: false }
+    query: { queryKey: getListFavoritesQueryKey(), enabled: !!currentUser, retry: false }
   });
 
   // Show skeleton while auth is loading

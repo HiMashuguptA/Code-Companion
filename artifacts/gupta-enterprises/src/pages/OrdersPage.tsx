@@ -13,12 +13,12 @@ export function OrdersPage() {
   const { currentUser, isLoading: authLoading } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  const { data, isLoading } = useListOrders({
+  const { data, isLoading } = useListOrders(undefined, {
     query: { 
       queryKey: getListOrdersQueryKey(), 
       enabled: !!currentUser, 
       retry: false,
-      refetchInterval: 2000, // Auto-refetch every 2 seconds for real-time updates
+      refetchInterval: 2000,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
       refetchOnReconnect: true

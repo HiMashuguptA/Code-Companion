@@ -29,9 +29,9 @@ import { AdminUsers } from "@/pages/admin/AdminUsers";
 
 import NotFound from "@/pages/not-found";
 
-// Point API client to backend
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-setBaseUrl(apiUrl);
+// Point API client to backend (URLs already include /api prefix)
+const apiUrl = import.meta.env.VITE_API_URL || "";
+setBaseUrl(apiUrl || null);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -111,13 +111,19 @@ function Router() {
   );
 }
 
+const PROTECTED_PREFIXES = ["/admin", "/account", "/orders", "/cart", "/checkout", "/favorites", "/profile"];
+
 function LogoutHandler() {
   const { currentUser, isLoading } = useAuth();
   const [location, navigate] = useLocation();
-  
-  // Handle logout redirect (when currentUser becomes null after being logged in)
+
+  // Only redirect logged-out users away from protected routes
   useEffect(() => {
-    if (!isLoading && currentUser === null && location !== "/auth" && location !== "/") {
+    if (
+      !isLoading &&
+      currentUser === null &&
+      PROTECTED_PREFIXES.some((p) => location === p || location.startsWith(`${p}/`))
+    ) {
       console.log("📍 User logged out, redirecting to home");
       navigate("/");
     }

@@ -1,0 +1,19 @@
+
+there is few issue I want you to fix-
+1.  while adding the image in the category, there should be option to add the image via url or file-upload via device and after adding that image, that image should come up in the shop by category option and should look good there.
+2. after the successful order and if the user order is assigned to delivery agent then user contact should be visible to the delivery agent and delivery agent contact details and his name should be visible to the user and admin should also see the contact details for users.
+3. while adding product from home page, it not reflecting in real-time, after refreshing the page only it shows the product added, also i want when I click on add to cart then after that its shows button to increase or decrease the quantity and update the cart item in real-time rather than refreshing the page.
+
+
+
+4. Invoice should be shown once delivery/order is complete.
+5. buy now option in product page
+6. Coupons, give control to admin to add coupons and no. of users can use/no. of times user can use.
+7. active coupons section not reflecting
+8. 2 days return policy with same functionality like flipkart follows
+9. refer and earn, give super coins and they can use within buying the products same like flipkart.
+10. make dedicated dashboard to view sales, low stock indicator, feature products, day wise sale, and custom date range sale, hero products on there sale rank.
+13. Add a beautiful momotto like same day delivery or anything else that suits this webapp
+14. UI should look like flipkart and functiaonlity and products listing also, like when we open flipkart it pops up a small login banner and we can cut that or login, we can see different category at the top section, we can see the differnt-differnt banners at the home page and I want that banner can be added by admin as much as he want and can change it, admin can add the offer's banner at the middle or bottom wherever he want to place within the home page and can choose the amount of area/section he want to use for other banners below it, we can customize the spotlight products, feature products, best discounts products can be shown based on the filter, popular products can be shown based on the filter add anything more if I missed to add here.
+15. specific product feature category
+16. make order category/history to look more good and UI/UX should be better
