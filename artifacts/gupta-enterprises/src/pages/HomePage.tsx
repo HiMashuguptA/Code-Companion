@@ -7,6 +7,7 @@ import { useListProducts, useListCategories, getListProductsQueryKey, getListCat
 import type { Product, Category } from "@workspace/api-client-react";
 import { formatPrice } from "@/lib/utils";
 import { ProductCard } from "@/components/ProductCard";
+import { RecentlyViewedRail } from "@/components/RecentlyViewedRail";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -172,6 +173,9 @@ export function HomePage() {
           </div>
         )}
       </section>
+
+      {/* Recently Viewed */}
+      <RecentlyViewedRail />
 
       {/* About & Contact */}
       <section className="container mx-auto px-4 py-10">

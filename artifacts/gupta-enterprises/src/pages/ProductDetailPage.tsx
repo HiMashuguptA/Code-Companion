@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Review } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
+import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -59,6 +60,11 @@ export function ProductDetailPage() {
       refetchOnReconnect: false
     }
   });
+
+  const { track: trackRecentlyViewed } = useRecentlyViewed();
+  useEffect(() => {
+    if (productId) trackRecentlyViewed(productId);
+  }, [productId, trackRecentlyViewed]);
 
   const addToCart = useAddToCart();
   const createReview = useCreateReview();
