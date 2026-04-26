@@ -8,7 +8,10 @@ import type { Product, Category } from "@workspace/api-client-react";
 import { formatPrice } from "@/lib/utils";
 import { ProductCard } from "@/components/ProductCard";
 import { RecentlyViewedRail } from "@/components/RecentlyViewedRail";
+import { CategoryNavBar } from "@/components/CategoryNavBar";
+import { BannerSection } from "@/components/BannerSection";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
+import { useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 
@@ -22,9 +25,9 @@ const shopIcon = L.divIcon({
 export function HomePage() {
   const [, navigate] = useLocation();
 
-  const { data: productsData, isLoading: productsLoading } = useListProducts({ limit: 8 }, {
+  const { data: productsData, isLoading: productsLoading } = useListProducts({ limit: 60 }, {
     query: { 
-      queryKey: getListProductsQueryKey({ limit: 8 }),
+      queryKey: getListProductsQueryKey({ limit: 60 }),
       staleTime: 1000 * 60 * 5,
       gcTime: 1000 * 60 * 10,
       refetchOnMount: false,
@@ -43,9 +46,38 @@ export function HomePage() {
     }
   });
 
-  const featuredProducts = productsData?.products ?? [];
+  const allProducts: Product[] = (productsData?.products ?? []) as Product[];
   // Ensure categories is an array
   const categoriesArray = Array.isArray(categories) ? categories : (categories ? [categories] : []);
+
+  const featuredProducts = useMemo(() => allProducts.slice(0, 8), [allProducts]);
+
+  const bestDiscounts = useMemo(
+    () => [...allProducts]
+      .filter((p) => Number(p.discount ?? 0) > 0)
+      .sort((a, b) => Number(b.discount ?? 0) - Number(a.discount ?? 0))
+      .slice(0, 8),
+    [allProducts],
+  );
+
+  const popularProducts = useMemo(
+    () => [...allProducts]
+      .sort((a, b) => Number(b.reviewCount ?? 0) - Number(a.reviewCount ?? 0))
+      .slice(0, 8),
+    [allProducts],
+  );
+
+  const spotlightProducts = useMemo(
+    () => [...allProducts]
+      .sort((a, b) => {
+        const ra = Number(a.rating ?? 0);
+        const rb = Number(b.rating ?? 0);
+        if (rb !== ra) return rb - ra;
+        return Number(b.reviewCount ?? 0) - Number(a.reviewCount ?? 0);
+      })
+      .slice(0, 8),
+    [allProducts],
+  );
 
   return (
     <div>
@@ -99,6 +131,12 @@ export function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Top quick category navigation bar (Flipkart-style) */}
+      <CategoryNavBar />
+
+      {/* Top banner area (admin-controlled) */}
+      <BannerSection position="TOP" />
 
       {/* Flipkart-style Categories with images */}
       <section className="container mx-auto px-4 py-6">
@@ -174,8 +212,79 @@ export function HomePage() {
         )}
       </section>
 
+      {/* Middle banner area (admin-controlled) */}
+      <BannerSection position="MIDDLE" />
+
+      {/* Best Discounts */}
+      {bestDiscounts.length > 0 && (
+        <section className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🔥</span>
+              <h2 className="text-xl font-bold">Best Discounts</h2>
+              <Badge className="bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/10">Up to {Math.max(...bestDiscounts.map((p) => Number(p.discount ?? 0)))}% OFF</Badge>
+            </div>
+            <Link href="/products">
+              <Button variant="ghost" size="sm" className="gap-1">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {bestDiscounts.map((p: Product) => <ProductCard key={p.id} product={p as never} />)}
+          </div>
+        </section>
+      )}
+
+      {/* Popular Products */}
+      {popularProducts.length > 0 && (
+        <section className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">⭐</span>
+              <h2 className="text-xl font-bold">Popular Products</h2>
+            </div>
+            <Link href="/products">
+              <Button variant="ghost" size="sm" className="gap-1">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {popularProducts.map((p: Product, idx: number) => (
+              <div key={p.id} className="relative">
+                {idx < 3 && (
+                  <Badge className="absolute -top-2 -left-2 z-10 bg-amber-500 text-white border-2 border-background shadow">
+                    #{idx + 1}
+                  </Badge>
+                )}
+                <ProductCard product={p as never} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Spotlight Products */}
+      {spotlightProducts.length > 0 && (
+        <section className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">✨</span>
+              <h2 className="text-xl font-bold">Spotlight</h2>
+              <span className="text-xs text-muted-foreground">Highest-rated picks</span>
+            </div>
+            <Link href="/products">
+              <Button variant="ghost" size="sm" className="gap-1">View All <ArrowRight className="w-3.5 h-3.5" /></Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {spotlightProducts.map((p: Product) => <ProductCard key={p.id} product={p as never} />)}
+          </div>
+        </section>
+      )}
+
       {/* Recently Viewed */}
       <RecentlyViewedRail />
+
+      {/* Bottom banner area (admin-controlled) */}
+      <BannerSection position="BOTTOM" />
 
       {/* About & Contact */}
       <section className="container mx-auto px-4 py-10">

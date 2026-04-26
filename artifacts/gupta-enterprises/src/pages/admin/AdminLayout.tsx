@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw, Image as ImageIcon } from "lucide-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo } from "react";
@@ -15,6 +15,7 @@ const navItems = [
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/coupons", label: "Coupons", icon: Tag },
+  { href: "/admin/banners", label: "Banners", icon: ImageIcon },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {

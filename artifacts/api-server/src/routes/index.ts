@@ -12,6 +12,7 @@ import trackingRouter from "./tracking.js";
 import notificationsRouter from "./notifications.js";
 import analyticsRouter from "./analytics.js";
 import favoritesRouter from "./favorites.js";
+import bannersRouter from "./banners.js";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/tracking", trackingRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/favorites", favoritesRouter);
+router.use("/banners", bannersRouter);
 
 export default router;

@@ -1015,6 +1015,98 @@ paths:
                   isFavorited:
                     type: boolean
 
+  # BANNERS
+  /banners:
+    get:
+      operationId: listBanners
+      tags: [banners]
+      summary: List active banners (public)
+      parameters:
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum: [TOP, MIDDLE, BOTTOM]
+      responses:
+        "200":
+          description: Banners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+    post:
+      operationId: createBanner
+      tags: [banners]
+      summary: Create a banner (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBannerBody"
+      responses:
+        "201":
+          description: Created banner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+
+  /banners/all:
+    get:
+      operationId: listAllBanners
+      tags: [banners]
+      summary: List all banners including inactive (Admin)
+      responses:
+        "200":
+          description: Banners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+
+  /banners/{bannerId}:
+    put:
+      operationId: updateBanner
+      tags: [banners]
+      summary: Update a banner (Admin)
+      parameters:
+        - name: bannerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBannerBody"
+      responses:
+        "200":
+          description: Updated banner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+    delete:
+      operationId: deleteBanner
+      tags: [banners]
+      summary: Delete a banner (Admin)
+      parameters:
+        - name: bannerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -1882,3 +1974,91 @@ components:
       required:
         - lat
         - lng
+
+    Banner:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+        linkUrl:
+          type: string
+          nullable: true
+        position:
+          type: string
+          enum: [TOP, MIDDLE, BOTTOM]
+        size:
+          type: string
+          enum: [SMALL, MEDIUM, LARGE, FULL]
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - imageUrl
+        - position
+        - size
+        - sortOrder
+        - isActive
+
+    CreateBannerBody:
+      type: object
+      properties:
+        title:
+          type: string
+        subtitle:
+          type: string
+        imageUrl:
+          type: string
+        linkUrl:
+          type: string
+        position:
+          type: string
+          enum: [TOP, MIDDLE, BOTTOM]
+        size:
+          type: string
+          enum: [SMALL, MEDIUM, LARGE, FULL]
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+      required:
+        - title
+        - imageUrl
+        - position
+
+    UpdateBannerBody:
+      type: object
+      properties:
+        title:
+          type: string
+        subtitle:
+          type: string
+        imageUrl:
+          type: string
+        linkUrl:
+          type: string
+        position:
+          type: string
+          enum: [TOP, MIDDLE, BOTTOM]
+        size:
+          type: string
+          enum: [SMALL, MEDIUM, LARGE, FULL]
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean

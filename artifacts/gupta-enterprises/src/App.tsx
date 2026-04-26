@@ -28,6 +28,7 @@ import { AdminOrders } from "@/pages/admin/AdminOrders";
 import { AdminProducts } from "@/pages/admin/AdminProducts";
 import { AdminCategories } from "@/pages/admin/AdminCategories";
 import { AdminCoupons } from "@/pages/admin/AdminCoupons";
+import { AdminBanners } from "@/pages/admin/AdminBanners";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
 
 import NotFound from "@/pages/not-found";
@@ -106,6 +107,9 @@ function Router() {
       </Route>
       <Route path="/admin/coupons">
         <AdminLayout><AdminCoupons /></AdminLayout>
+      </Route>
+      <Route path="/admin/banners">
+        <AdminLayout><AdminBanners /></AdminLayout>
       </Route>
       <Route path="/admin/users">
         <AdminLayout><AdminUsers /></AdminLayout>
