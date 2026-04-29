@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -24,6 +24,9 @@ export const usersTable = pgTable("users", {
   role: text("role", { enum: ["USER", "ADMIN", "DELIVERY_AGENT"] }).notNull().default("USER"),
   isActive: boolean("is_active").notNull().default(true),
   addresses: jsonb("addresses").default("[]"),
+  superCoins: integer("super_coins").notNull().default(0),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

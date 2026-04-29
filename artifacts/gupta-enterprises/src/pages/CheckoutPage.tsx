@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { MapPin, CreditCard, Truck, Store, CheckCircle, AlertTriangle } from "lucide-react";
+import { MapPin, CreditCard, Truck, Store, CheckCircle, AlertTriangle, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { useGetCart, useCreateOrder, getGetCartQueryKey } from "@workspace/api-client-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  useGetCart, useCreateOrder, useGetMyReferralInfo,
+  getGetCartQueryKey, getGetMyReferralInfoQueryKey, getListMyCoinTransactionsQueryKey,
+} from "@workspace/api-client-react";
 import type { CartItem } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { formatPrice } from "@/lib/utils";
-import { SHOP_CONFIG, haversineDistanceKm, isWithinDeliveryRange } from "@/lib/shopConfig";
+import { SHOP_CONFIG, haversineDistanceKm } from "@/lib/shopConfig";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
@@ -37,17 +41,15 @@ export function CheckoutPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: cart } = useGetCart({ 
-    query: { 
-      queryKey: getGetCartQueryKey(), 
-      enabled: !!currentUser,
-      retry: false,
-      staleTime: 1000 * 60 * 5,
-      gcTime: 1000 * 60 * 10,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false
-    } 
+  const { data: cart } = useGetCart({
+    query: {
+      queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false,
+      staleTime: 1000 * 60 * 5, gcTime: 1000 * 60 * 10,
+      refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
+    },
+  });
+  const { data: referralInfo } = useGetMyReferralInfo({
+    query: { queryKey: getGetMyReferralInfoQueryKey(), enabled: !!currentUser, retry: false },
   });
   const createOrder = useCreateOrder();
 
@@ -61,6 +63,24 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [ordered, setOrdered] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+
+  const [useCoins, setUseCoins] = useState(false);
+  const [coinsToRedeem, setCoinsToRedeem] = useState(0);
+
+  const subtotal = cart?.subtotal ?? 0;
+  const couponDiscount = cart?.couponDiscount ?? 0;
+  const baseTotal = cart?.total ?? 0;
+  const deliveryFee = deliveryType === "DELIVERY" && subtotal < 500 ? 50 : 0;
+
+  const availableCoins = referralInfo?.superCoins ?? 0;
+  const maxRedeemable = useMemo(() => {
+    const halfOrder = Math.floor((baseTotal + deliveryFee) * 0.5);
+    return Math.max(0, Math.min(availableCoins, halfOrder));
+  }, [availableCoins, baseTotal, deliveryFee]);
+
+  const effectiveCoins = useCoins ? Math.min(coinsToRedeem || 0, maxRedeemable) : 0;
+  const grandTotal = Math.max(0, baseTotal + deliveryFee - effectiveCoins);
+  const estimatedReward = Math.floor((baseTotal + deliveryFee - effectiveCoins) * 0.02);
 
   const handleMapClick = async (lat: number, lng: number) => {
     setMapPos([lat, lng]);
@@ -80,13 +100,13 @@ export function CheckoutPage() {
         state: addr.state || a.state,
         pincode: addr.postcode || a.pincode,
       }));
-    } catch (_) {}
+    } catch (_) { /* ignored */ }
   };
 
   const handleUseMyLocation = () => {
     navigator.geolocation.getCurrentPosition(
       pos => handleMapClick(pos.coords.latitude, pos.coords.longitude),
-      () => toast.error("Location access denied. Please click on the map to select your location.")
+      () => toast.error("Location access denied. Please click on the map to select your location."),
     );
   };
 
@@ -112,26 +132,23 @@ export function CheckoutPage() {
     const orderData = {
       deliveryType,
       paymentMethod,
-      contactDetails: {
-        name: contactDetails.name,
-        phone: contactDetails.phone,
-      },
+      contactDetails: { name: contactDetails.name, phone: contactDetails.phone },
+      coinsToRedeem: effectiveCoins,
       ...(deliveryType === "DELIVERY" && {
         deliveryAddress: {
           id: `addr-${Date.now()}`,
-          street: address.street,
-          city: address.city,
-          state: address.state,
+          street: address.street, city: address.city, state: address.state,
           pincode: address.pincode,
-          lat: address.lat || undefined,
-          lng: address.lng || undefined,
-        }
+          lat: address.lat || undefined, lng: address.lng || undefined,
+        },
       }),
     };
 
     createOrder.mutate({ data: orderData }, {
-      onSuccess: (order) => {
+      onSuccess: order => {
         queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyReferralInfoQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListMyCoinTransactionsQueryKey() });
         setOrdered(true);
         setOrderId(order.id);
       },
@@ -149,10 +166,15 @@ export function CheckoutPage() {
         </div>
         <h1 className="text-2xl font-bold mb-2">Order Placed!</h1>
         <p className="text-muted-foreground mb-2">Order #{orderId} placed successfully.</p>
+        {estimatedReward > 0 && (
+          <p className="text-sm text-amber-600 mb-2 flex items-center justify-center gap-1">
+            <Coins className="w-4 h-4" /> You earned {estimatedReward} Super Coins!
+          </p>
+        )}
         <p className="text-sm text-muted-foreground mb-8">You will receive a confirmation shortly.</p>
         <div className="flex flex-col gap-3">
           <Button onClick={() => navigate(`/orders/${orderId}`)}>Track Order</Button>
-          <Button variant="outline" onClick={() => navigate("/products")}>Continue Shopping</Button>
+          <Button variant="outline" onClick={() => navigate("/")}>Continue Shopping</Button>
         </div>
       </div>
     );
@@ -162,7 +184,7 @@ export function CheckoutPage() {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <p className="text-muted-foreground mb-4">Your cart is empty</p>
-        <Button onClick={() => navigate("/products")}>Shop Now</Button>
+        <Button onClick={() => navigate("/")}>Shop Now</Button>
       </div>
     );
   }
@@ -197,31 +219,20 @@ export function CheckoutPage() {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="name" className="text-sm">Full Name *</Label>
-                <input 
-                  id="name"
-                  type="text" 
-                  placeholder="Enter your full name" 
-                  value={contactDetails.name}
-                  onChange={(e) => setContactDetails(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                <input id="name" type="text" placeholder="Enter your full name"
+                  value={contactDetails.name} onChange={e => setContactDetails(p => ({ ...p, name: e.target.value }))}
+                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <div>
                 <Label htmlFor="phone" className="text-sm">Phone Number *</Label>
-                <input 
-                  id="phone"
-                  type="tel" 
-                  placeholder="10-digit phone number (6-9)" 
-                  value={contactDetails.phone}
-                  onChange={(e) => setContactDetails(prev => ({ ...prev, phone: e.target.value }))}
-                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                <input id="phone" type="tel" placeholder="10-digit phone number (6-9)"
+                  value={contactDetails.phone} onChange={e => setContactDetails(p => ({ ...p, phone: e.target.value }))}
+                  className="w-full mt-1.5 px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                 <p className="text-xs text-muted-foreground mt-1">This number will be shared with the delivery agent</p>
               </div>
             </div>
           </section>
 
-          {/* Delivery Address with 15km radius check */}
           {deliveryType === "DELIVERY" && (
             <section className="bg-card border rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
@@ -235,37 +246,25 @@ export function CheckoutPage() {
                 📍 We deliver within <strong>{SHOP_CONFIG.deliveryRadiusKm}km</strong> of our shop in Kohima. Click on the map to select your location.
               </p>
 
-              {/* Map with delivery radius */}
               <div className="h-56 rounded-xl overflow-hidden mb-4 border">
                 <MapContainer center={[SHOP_CONFIG.lat, SHOP_CONFIG.lng]} zoom={12} style={{ height: "100%", width: "100%" }}>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OpenStreetMap" />
                   <MapClickHandler onSelect={handleMapClick} />
-                  {/* Shop marker */}
                   <Marker position={[SHOP_CONFIG.lat, SHOP_CONFIG.lng]} icon={shopIcon} />
-                  {/* Delivery radius circle */}
-                  <Circle
-                    center={[SHOP_CONFIG.lat, SHOP_CONFIG.lng]}
-                    radius={SHOP_CONFIG.deliveryRadiusKm * 1000}
-                    pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.08, weight: 2 }}
-                  />
-                  {/* User location marker */}
+                  <Circle center={[SHOP_CONFIG.lat, SHOP_CONFIG.lng]} radius={SHOP_CONFIG.deliveryRadiusKm * 1000}
+                    pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.08, weight: 2 }} />
                   {markerSet && <Marker position={mapPos} icon={markerIcon} />}
                 </MapContainer>
               </div>
 
-              {/* Deliverability feedback */}
               {markerSet && (
                 <div className={`flex items-center gap-2 p-3 rounded-lg mb-4 text-sm ${deliverable ? "bg-green-50 dark:bg-green-900/10 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400"}`}>
                   {deliverable ? (
-                    <>
-                      <CheckCircle className="w-4 h-4 shrink-0" />
-                      <span>✅ Deliverable! You're <strong>{distanceKm}km</strong> from our shop. Within our {SHOP_CONFIG.deliveryRadiusKm}km delivery zone.</span>
-                    </>
+                    <><CheckCircle className="w-4 h-4 shrink-0" />
+                      <span>✅ Deliverable! You're <strong>{distanceKm}km</strong> from our shop. Within our {SHOP_CONFIG.deliveryRadiusKm}km delivery zone.</span></>
                   ) : (
-                    <>
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span>❌ Not Deliverable. You're <strong>{distanceKm}km</strong> away — outside our {SHOP_CONFIG.deliveryRadiusKm}km delivery radius from Kohima. Try Store Pickup instead.</span>
-                    </>
+                    <><AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>❌ Not Deliverable. You're <strong>{distanceKm}km</strong> away — outside our {SHOP_CONFIG.deliveryRadiusKm}km delivery radius from Kohima. Try Store Pickup instead.</span></>
                   )}
                 </div>
               )}
@@ -292,7 +291,6 @@ export function CheckoutPage() {
             </section>
           )}
 
-          {/* Store Pickup Info */}
           {deliveryType === "PICKUP" && (
             <section className="bg-card border rounded-xl p-5">
               <h2 className="font-semibold mb-3">Store Location</h2>
@@ -311,7 +309,40 @@ export function CheckoutPage() {
             </section>
           )}
 
-          {/* Payment */}
+          {/* Super Coins redemption */}
+          {availableCoins > 0 && (
+            <section className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300/50 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-amber-500" />
+                  <h2 className="font-semibold">Use Super Coins</h2>
+                  <Badge variant="secondary" className="text-xs">{availableCoins} available</Badge>
+                </div>
+                <Switch checked={useCoins}
+                  onCheckedChange={(v) => { setUseCoins(v); setCoinsToRedeem(v ? maxRedeemable : 0); }}
+                  disabled={maxRedeemable <= 0} />
+              </div>
+              {maxRedeemable <= 0 ? (
+                <p className="text-xs text-muted-foreground">Order total too small to redeem coins.</p>
+              ) : useCoins ? (
+                <>
+                  <div className="flex items-center gap-3 mb-2">
+                    <input type="range" min={0} max={maxRedeemable} value={coinsToRedeem}
+                      onChange={e => setCoinsToRedeem(Number(e.target.value))}
+                      className="flex-1 accent-amber-500" />
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-amber-600">{effectiveCoins} 🪙</p>
+                      <p className="text-xs text-muted-foreground">−{formatPrice(effectiveCoins)}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Maximum: {maxRedeemable} coins (50% of order). 1 Coin = ₹1.</p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Toggle on to apply up to {maxRedeemable} coins (₹{maxRedeemable} off).</p>
+              )}
+            </section>
+          )}
+
           <section className="bg-card border rounded-xl p-5">
             <h2 className="font-semibold mb-4">Payment Method</h2>
             <div className="space-y-2">
@@ -333,7 +364,6 @@ export function CheckoutPage() {
           </section>
         </div>
 
-        {/* Summary */}
         <div className="bg-card border rounded-xl p-5 h-fit sticky top-24">
           <h2 className="font-semibold text-lg mb-4">Order Summary</h2>
           <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
@@ -350,16 +380,27 @@ export function CheckoutPage() {
           </div>
           <Separator className="my-3" />
           <div className="space-y-1 text-sm mb-4">
-            <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatPrice(cart.subtotal)}</span></div>
-            {cart.couponDiscount > 0 && (
-              <div className="flex justify-between text-green-600"><span>Coupon ({cart.couponCode})</span><span>-{formatPrice(cart.couponDiscount)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatPrice(subtotal)}</span></div>
+            {couponDiscount > 0 && (
+              <div className="flex justify-between text-green-600"><span>Coupon ({cart.couponCode})</span><span>-{formatPrice(couponDiscount)}</span></div>
             )}
             <div className="flex justify-between text-muted-foreground">
               <span>Delivery</span>
-              <span className={cart.subtotal >= 500 ? "text-green-600" : ""}>{cart.subtotal >= 500 ? "Free" : formatPrice(50)}</span>
+              <span className={deliveryFee === 0 ? "text-green-600" : ""}>{deliveryFee === 0 ? "Free" : formatPrice(deliveryFee)}</span>
             </div>
+            {effectiveCoins > 0 && (
+              <div className="flex justify-between text-amber-600">
+                <span className="flex items-center gap-1"><Coins className="w-3.5 h-3.5" /> Super Coins ({effectiveCoins})</span>
+                <span>-{formatPrice(effectiveCoins)}</span>
+              </div>
+            )}
             <Separator />
-            <div className="flex justify-between font-bold"><span>Total</span><span>{formatPrice(cart.total + (cart.subtotal < 500 ? 50 : 0))}</span></div>
+            <div className="flex justify-between font-bold"><span>Total</span><span>{formatPrice(grandTotal)}</span></div>
+            {estimatedReward > 0 && (
+              <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                <Coins className="w-3 h-3" /> You'll earn {estimatedReward} Super Coins
+              </p>
+            )}
           </div>
 
           {deliveryType === "DELIVERY" && markerSet && !deliverable && (

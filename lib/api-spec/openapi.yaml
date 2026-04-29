@@ -126,6 +126,20 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: tags
+          in: query
+          description: Comma-separated tag list
+          schema:
+            type: string
+        - name: featured
+          in: query
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, price_asc, price_desc, popularity, discount]
         - name: page
           in: query
           schema:
@@ -175,6 +189,27 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Product"
+
+  /products/tags:
+    get:
+      operationId: listProductTags
+      tags: [products]
+      summary: Get all distinct product tags with counts
+      responses:
+        "200":
+          description: Tags list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    tag:
+                      type: string
+                    count:
+                      type: integer
+                  required: [tag, count]
 
   /products/{productId}:
     get:
@@ -1107,6 +1142,91 @@ paths:
         "204":
           description: Deleted
 
+  # REFERRALS
+  /referrals/me:
+    get:
+      operationId: getMyReferralInfo
+      tags: [referrals]
+      summary: Get the current user's referral code, coin balance, and stats
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralInfo"
+
+  /referrals/transactions:
+    get:
+      operationId: listMyCoinTransactions
+      tags: [referrals]
+      summary: List the current user's Super Coin transactions
+      responses:
+        "200":
+          description: Coin transaction history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CoinTransaction"
+
+  /analytics/sales-range:
+    get:
+      operationId: getSalesRange
+      tags: [analytics]
+      summary: Get day-wise sales for an arbitrary date range (Admin)
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Day-wise sales
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenueDataPoint"
+
+  /analytics/low-stock:
+    get:
+      operationId: getLowStockProducts
+      tags: [analytics]
+      summary: Get low/out of stock products (Admin)
+      responses:
+        "200":
+          description: Low stock products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LowStockProduct"
+
+  /analytics/inventory:
+    get:
+      operationId: getInventoryInsights
+      tags: [analytics]
+      summary: Inventory insights (Admin)
+      responses:
+        "200":
+          description: Inventory insights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryInsights"
+
 components:
   schemas:
     HealthStatus:
@@ -1139,6 +1259,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Address"
+        superCoins:
+          type: integer
+        referralCode:
+          type: string
+          nullable: true
+        referredBy:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1146,6 +1274,7 @@ components:
         - id
         - email
         - role
+        - superCoins
         - createdAt
 
     Address:
@@ -1205,6 +1334,16 @@ components:
           type: number
         reviewCount:
           type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        isFeatured:
+          type: boolean
+        salesCount:
+          type: integer
+        lowStockThreshold:
+          type: integer
         isActive:
           type: boolean
         createdAt:
@@ -1218,6 +1357,9 @@ components:
         - sellingPrice
         - stock
         - images
+        - tags
+        - isFeatured
+        - salesCount
         - isActive
         - createdAt
 
@@ -1343,6 +1485,10 @@ components:
           type: number
         couponDiscount:
           type: number
+        coinsRedeemed:
+          type: integer
+        coinsEarned:
+          type: integer
         total:
           type: number
         couponCode:
@@ -1710,6 +1856,8 @@ components:
           type: string
         photoUrl:
           type: string
+        referralCode:
+          type: string
       required:
         - firebaseUid
         - email
@@ -1747,6 +1895,14 @@ components:
             type: string
         stock:
           type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        isFeatured:
+          type: boolean
+        lowStockThreshold:
+          type: integer
       required:
         - name
         - description
@@ -1773,6 +1929,14 @@ components:
           items:
             type: string
         stock:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        isFeatured:
+          type: boolean
+        lowStockThreshold:
           type: integer
         isActive:
           type: boolean
@@ -1841,6 +2005,8 @@ components:
         pickupDate:
           type: string
           format: date-time
+        coinsToRedeem:
+          type: integer
       required:
         - deliveryType
         - paymentMethod
@@ -1990,6 +2156,9 @@ components:
         linkUrl:
           type: string
           nullable: true
+        productId:
+          type: string
+          nullable: true
         position:
           type: string
           enum: [TOP, MIDDLE, BOTTOM]
@@ -2026,6 +2195,9 @@ components:
           type: string
         linkUrl:
           type: string
+        productId:
+          type: string
+          nullable: true
         position:
           type: string
           enum: [TOP, MIDDLE, BOTTOM]
@@ -2052,6 +2224,9 @@ components:
           type: string
         linkUrl:
           type: string
+        productId:
+          type: string
+          nullable: true
         position:
           type: string
           enum: [TOP, MIDDLE, BOTTOM]
@@ -2062,3 +2237,92 @@ components:
           type: integer
         isActive:
           type: boolean
+
+    CoinTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: integer
+        reason:
+          type: string
+          enum: [REFERRAL_BONUS, REFEREE_BONUS, ORDER_REWARD, ORDER_REDEEM, ADMIN_ADJUST]
+        description:
+          type: string
+          nullable: true
+        orderId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - amount
+        - reason
+        - createdAt
+
+    ReferralInfo:
+      type: object
+      properties:
+        referralCode:
+          type: string
+        superCoins:
+          type: integer
+        totalReferrals:
+          type: integer
+        totalEarned:
+          type: integer
+        shareUrl:
+          type: string
+      required:
+        - referralCode
+        - superCoins
+        - totalReferrals
+        - totalEarned
+        - shareUrl
+
+    LowStockProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        stock:
+          type: integer
+        lowStockThreshold:
+          type: integer
+      required:
+        - productId
+        - name
+        - stock
+        - lowStockThreshold
+
+    InventoryInsights:
+      type: object
+      properties:
+        totalSkus:
+          type: integer
+        totalStockUnits:
+          type: integer
+        outOfStock:
+          type: integer
+        lowStock:
+          type: integer
+        inventoryValue:
+          type: number
+        topRotating:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProduct"
+      required:
+        - totalSkus
+        - totalStockUnits
+        - outOfStock
+        - lowStock
+        - inventoryValue
+        - topRotating

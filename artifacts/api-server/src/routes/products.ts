@@ -1,14 +1,24 @@
 import { Router } from "express";
 import { db, productsTable, categoriesTable, reviewsTable } from "@workspace/db";
-import { eq, ilike, and, gte, lte, sql, desc, or } from "drizzle-orm";
+import { eq, ilike, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
 import { CreateProductBody, UpdateProductBody } from "@workspace/api-zod";
 import { authenticateUser, requireAdmin, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
 
-// List products with filters
 router.get("/", async (req, res) => {
-  const { category, search, minPrice, maxPrice, inStock, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const {
+    category,
+    search,
+    minPrice,
+    maxPrice,
+    inStock,
+    tags,
+    featured,
+    sort,
+    page = "1",
+    limit = "20",
+  } = req.query as Record<string, string>;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const offset = (pageNum - 1) * limitNum;
@@ -23,15 +33,38 @@ router.get("/", async (req, res) => {
     if (search) {
       conditions.push(or(
         ilike(productsTable.name, `%${search}%`),
-        ilike(productsTable.description, `%${search}%`)
+        ilike(productsTable.description, `%${search}%`),
       )!);
     }
     if (minPrice) conditions.push(gte(productsTable.sellingPrice, minPrice));
     if (maxPrice) conditions.push(lte(productsTable.sellingPrice, maxPrice));
-    if (inStock === "true") conditions.push(gte(productsTable.stock, "1" as never));
+    if (inStock === "true") conditions.push(gte(productsTable.stock, 1));
+    if (tags) {
+      const tagArr = tags.split(",").map(t => t.trim()).filter(Boolean);
+      if (tagArr.length > 0) {
+        conditions.push(sql`${productsTable.tags} && ${tagArr}`);
+      }
+    }
+    if (featured === "true") conditions.push(eq(productsTable.isFeatured, true));
+
+    const orderClause = (() => {
+      switch (sort) {
+        case "price_asc": return asc(productsTable.sellingPrice);
+        case "price_desc": return desc(productsTable.sellingPrice);
+        case "popularity": return desc(productsTable.salesCount);
+        case "discount": return sql`(${productsTable.actualPrice} - ${productsTable.sellingPrice}) DESC`;
+        case "newest":
+        default:
+          return desc(productsTable.createdAt);
+      }
+    })();
 
     const whereClause = and(...conditions);
-    const products = await db.select().from(productsTable).where(whereClause).limit(limitNum).offset(offset).orderBy(desc(productsTable.createdAt));
+    const products = await db.select().from(productsTable)
+      .where(whereClause)
+      .limit(limitNum)
+      .offset(offset)
+      .orderBy(orderClause);
     const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(productsTable).where(whereClause);
     const total = Number(countResult?.count ?? 0);
 
@@ -50,13 +83,21 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Featured products
 router.get("/featured", async (req, res) => {
   try {
-    const products = await db.select().from(productsTable)
-      .where(and(eq(productsTable.isActive, true), gte(productsTable.stock, "1" as never)))
-      .limit(8)
-      .orderBy(desc(productsTable.createdAt));
+    const featured = await db.select().from(productsTable)
+      .where(and(eq(productsTable.isActive, true), eq(productsTable.isFeatured, true)))
+      .limit(12)
+      .orderBy(desc(productsTable.salesCount));
+    let products = featured;
+    if (products.length < 4) {
+      const fillers = await db.select().from(productsTable)
+        .where(and(eq(productsTable.isActive, true), gte(productsTable.stock, 1)))
+        .limit(12 - products.length)
+        .orderBy(desc(productsTable.salesCount));
+      const seen = new Set(products.map(p => p.id));
+      products = [...products, ...fillers.filter(p => !seen.has(p.id))];
+    }
     const enriched = await Promise.all(products.map(p => enrichProduct(p)));
     return res.json(enriched);
   } catch (err) {
@@ -65,7 +106,24 @@ router.get("/featured", async (req, res) => {
   }
 });
 
-// Get single product
+router.get("/tags", async (req, res) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT tag, COUNT(*)::int AS count
+      FROM (SELECT unnest(tags) AS tag FROM products WHERE is_active = true) t
+      GROUP BY tag
+      ORDER BY count DESC, tag ASC
+    `);
+    return res.json(result.rows.map((r: Record<string, unknown>) => ({
+      tag: String(r.tag),
+      count: Number(r.count),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list tags");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/:productId", async (req, res) => {
   const id = parseInt(req.params.productId!);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid product ID" });
@@ -80,7 +138,6 @@ router.get("/:productId", async (req, res) => {
   }
 });
 
-// Create product (Admin)
 router.post("/", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
   const parsed = CreateProductBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
@@ -94,6 +151,9 @@ router.post("/", authenticateUser, requireAdmin, async (req: AuthRequest, res) =
       sellingPrice: String(parsed.data.sellingPrice),
       images: parsed.data.images,
       stock: parsed.data.stock,
+      tags: parsed.data.tags ?? [],
+      isFeatured: parsed.data.isFeatured ?? false,
+      lowStockThreshold: parsed.data.lowStockThreshold ?? 5,
     }).returning();
 
     return res.status(201).json(await enrichProduct(product!));
@@ -103,7 +163,6 @@ router.post("/", authenticateUser, requireAdmin, async (req: AuthRequest, res) =
   }
 });
 
-// Update product (Admin)
 router.put("/:productId", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
   const id = parseInt(req.params.productId!);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid product ID" });
@@ -121,6 +180,9 @@ router.put("/:productId", authenticateUser, requireAdmin, async (req: AuthReques
     if (d.sellingPrice !== undefined) updates.sellingPrice = String(d.sellingPrice);
     if (d.images !== undefined) updates.images = d.images;
     if (d.stock !== undefined) updates.stock = d.stock;
+    if (d.tags !== undefined) updates.tags = d.tags;
+    if (d.isFeatured !== undefined) updates.isFeatured = d.isFeatured;
+    if (d.lowStockThreshold !== undefined) updates.lowStockThreshold = d.lowStockThreshold;
     if (d.isActive !== undefined) updates.isActive = d.isActive;
 
     const [product] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
@@ -132,7 +194,6 @@ router.put("/:productId", authenticateUser, requireAdmin, async (req: AuthReques
   }
 });
 
-// Delete product (Admin)
 router.delete("/:productId", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
   const id = parseInt(req.params.productId!);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid product ID" });
@@ -174,6 +235,10 @@ async function enrichProduct(product: typeof productsTable.$inferSelect) {
     stock: product.stock,
     rating: Math.round(rating * 10) / 10,
     reviewCount: reviews.length,
+    tags: product.tags ?? [],
+    isFeatured: product.isFeatured,
+    salesCount: product.salesCount ?? 0,
+    lowStockThreshold: product.lowStockThreshold ?? 5,
     isActive: product.isActive,
     createdAt: product.createdAt,
   };
