@@ -42,6 +42,7 @@ export type DbUser = {
   photoUrl?: string | null;
   role: "USER" | "ADMIN" | "DELIVERY_AGENT";
   addresses?: unknown[];
+  superCoins?: number;
   createdAt: string;
 };
 
@@ -52,7 +53,7 @@ type AuthContextType = {
   refetchProfile: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmailPassword: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, referralCode?: string) => Promise<void>;
   signOut: () => Promise<void>;
   setupRecaptcha: (containerId: string) => void;
   sendPhoneOTP: (phone: string) => Promise<ConfirmationResult>;
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasRegisteredRef = useRef<boolean>(false);
   const authListenerSetupRef = useRef<boolean>(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const pendingReferralCodeRef = useRef<string | undefined>(undefined);
 
   const { data: dbUser, refetch: rawRefetchProfile } = useGetProfile({
     query: {
@@ -135,13 +137,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user && !hasRegisteredRef.current) {
         hasRegisteredRef.current = true;
         try {
+          const referralCode = pendingReferralCodeRef.current;
+          pendingReferralCodeRef.current = undefined;
           const result = await registerMutationRef.current.mutateAsync({
             data: {
               firebaseUid: user.uid,
               email: user.email || `${user.phoneNumber}@phone.auth`,
               name: user.displayName || undefined,
               phone: user.phoneNumber || undefined,
-              photoUrl: user.photoURL || undefined
+              photoUrl: user.photoURL || undefined,
+              ...(referralCode ? { referralCode } : {})
             }
           });
           console.log("✅ User registered successfully:", user.uid, "Role:", (result as any)?.role);
@@ -173,7 +178,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, pass);
   }, []);
 
-  const signUpWithEmail = useCallback(async (email: string, pass: string, _name: string) => {
+  const signUpWithEmail = useCallback(async (email: string, pass: string, _name: string, referralCode?: string) => {
+    if (referralCode) pendingReferralCodeRef.current = referralCode;
     await createUserWithEmailAndPassword(auth, email, pass);
   }, []);
 

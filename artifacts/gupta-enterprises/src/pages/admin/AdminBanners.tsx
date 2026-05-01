@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, ExternalLink, Package } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, ExternalLink, Package, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,6 +62,36 @@ export function AdminBanners() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<BannerForm>(EMPTY_FORM);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { toast.error("File too large (max 20 MB)"); return; }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const img = new Image();
+      img.onload = () => {
+        // Banners are wide: target 1400×525 (roughly 8:3 aspect), quality 0.85
+        const TARGET_W = 1400, TARGET_H = 525;
+        const scale = Math.min(TARGET_W / img.width, TARGET_H / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { setUploading(false); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        setForm(f => ({ ...f, imageUrl: dataUrl }));
+        setUploading(false);
+      };
+      img.src = evt.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
 
   function openCreate() { setEditingId(null); setForm(EMPTY_FORM); setOpen(true); }
 
@@ -217,11 +247,28 @@ export function AdminBanners() {
               <Textarea id="b-subtitle" rows={2} value={form.subtitle} onChange={e => setForm(f => ({ ...f, subtitle: e.target.value }))} placeholder="Optional supporting text" />
             </div>
             <div>
-              <Label htmlFor="b-image">Image URL *</Label>
-              <Input id="b-image" value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://..." />
+              <Label>Banner Image *</Label>
+              <div className="flex gap-2 mt-1">
+                <Input value={form.imageUrl.startsWith("data:") ? "(uploaded image)" : form.imageUrl}
+                  onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                  placeholder="Paste URL or upload file below"
+                  readOnly={form.imageUrl.startsWith("data:")}
+                  className={form.imageUrl.startsWith("data:") ? "opacity-60" : ""}
+                />
+                <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5"
+                  onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  <Upload className="w-3.5 h-3.5" />
+                  {uploading ? "Processing…" : "Upload"}
+                </Button>
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              <p className="text-xs text-muted-foreground mt-1">Tip: Upload a wide banner image (e.g. 1400×525 px). JPG/PNG/WebP accepted, max 20 MB.</p>
               {form.imageUrl && (
-                <div className="mt-2 rounded-lg overflow-hidden border h-32 bg-muted">
+                <div className="mt-2 rounded-lg overflow-hidden border h-28 bg-muted relative group">
                   <img src={form.imageUrl} alt="preview" className="w-full h-full object-cover" />
+                  <button type="button"
+                    className="absolute top-1.5 right-1.5 bg-destructive text-destructive-foreground rounded-md px-2 py-0.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => setForm(f => ({ ...f, imageUrl: "" }))}>Remove</button>
                 </div>
               )}
             </div>

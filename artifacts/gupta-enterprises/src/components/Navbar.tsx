@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart, Gift, Phone, Coins } from "lucide-react";
@@ -20,8 +20,18 @@ export function Navbar() {
   const { currentUser, dbUser, signOut, refetchProfile } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("search") ?? "";
+  });
   const [isRefetching, setIsRefetching] = useState(false);
+
+  // Sync search query from URL when navigating (e.g. back/forward)
+  useEffect(() => {
+    const params = new URLSearchParams(location.includes("?") ? location.split("?")[1] : "");
+    const s = params.get("search") ?? "";
+    setSearchQuery(s);
+  }, [location]);
   const qc = useQueryClient();
 
   const { data: cart } = useGetCart({
@@ -40,6 +50,7 @@ export function Navbar() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
+    else navigate("/");
   };
 
   const handleRefreshProfile = async () => {
