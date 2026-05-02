@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, Trash2, Tag, Copy } from "lucide-react";
+import { Plus, Edit2, Trash2, Tag, Copy, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,6 +47,9 @@ export function AdminCoupons() {
   const [open, setOpen] = useState(false);
   const [editCoupon, setEditCoupon] = useState<Coupon | null>(null);
   const [form, setForm] = useState<CouponForm>(defaultForm);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastForm, setBroadcastForm] = useState({ title: "", message: "" });
+  const [broadcastPending, setBroadcastPending] = useState(false);
 
   const { data: coupons, isLoading } = useListCoupons({
     query: { queryKey: getListCouponsQueryKey(), retry: false }
@@ -128,6 +131,31 @@ export function AdminCoupons() {
     toast.success("Coupon code copied!");
   };
 
+  const handleBroadcast = async () => {
+    if (!broadcastForm.title || !broadcastForm.message) {
+      toast.error("Please fill in both title and message");
+      return;
+    }
+    setBroadcastPending(true);
+    try {
+      const res = await fetch("/api/notifications/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...broadcastForm, type: "PROMO" }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      toast.success(data.message ?? "Notification sent!");
+      setBroadcastOpen(false);
+      setBroadcastForm({ title: "", message: "" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send notification");
+    } finally {
+      setBroadcastPending(false);
+    }
+  };
+
   // Show skeleton while auth is loading
   if (authLoading) return (
     <div className="space-y-4">
@@ -156,7 +184,12 @@ export function AdminCoupons() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Coupons</h1>
-        <Button onClick={openNew} className="gap-2"><Plus className="w-4 h-4" /> New Coupon</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBroadcastOpen(true)} className="gap-2">
+            <Bell className="w-4 h-4" /> Notify Users
+          </Button>
+          <Button onClick={openNew} className="gap-2"><Plus className="w-4 h-4" /> New Coupon</Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -299,6 +332,39 @@ export function AdminCoupons() {
                 {editCoupon ? "Update Coupon" : "Create Coupon"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Broadcast notification dialog */}
+      <Dialog open={broadcastOpen} onOpenChange={setBroadcastOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Bell className="w-4 h-4" /> Send Notification to All Users</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Title *</Label>
+              <input className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="e.g. New Coupon Available!"
+                value={broadcastForm.title}
+                onChange={e => setBroadcastForm(f => ({ ...f, title: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Message *</Label>
+              <textarea className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                rows={3}
+                placeholder="Use code SAVE20 to get 20% off your next order!"
+                value={broadcastForm.message}
+                onChange={e => setBroadcastForm(f => ({ ...f, message: e.target.value }))} />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleBroadcast} disabled={broadcastPending} className="flex-1 gap-2">
+                <Bell className="w-4 h-4" />
+                {broadcastPending ? "Sending..." : "Send to All Users"}
+              </Button>
+              <Button variant="outline" onClick={() => setBroadcastOpen(false)}>Cancel</Button>
             </div>
           </div>
         </DialogContent>

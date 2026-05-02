@@ -9,7 +9,7 @@ import {
   notificationsTable,
   coinTransactionsTable,
 } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, ne } from "drizzle-orm";
 import { CreateOrderBody, UpdateOrderBody, AssignDeliveryAgentBody } from "@workspace/api-zod";
 import { authenticateUser, requireAdmin, requireDeliveryAgent, type AuthRequest } from "../middlewares/auth.js";
 
@@ -143,18 +143,7 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
         orderId: order!.id,
       });
     }
-    if (coinsEarned > 0) {
-      await db.update(usersTable)
-        .set({ superCoins: sql`${usersTable.superCoins} + ${coinsEarned}` })
-        .where(eq(usersTable.id, req.userId!));
-      await db.insert(coinTransactionsTable).values({
-        userId: req.userId!,
-        amount: coinsEarned,
-        reason: "ORDER_REWARD",
-        description: `Earned on Order #${order!.id}`,
-        orderId: order!.id,
-      });
-    }
+    // coinsEarned are recorded but NOT credited until order is DELIVERED
 
     const trackingPayload: typeof trackingTable.$inferInsert = {
       orderId: order!.id,
@@ -173,6 +162,18 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       type: "ORDER_UPDATE",
       orderId: order!.id,
     });
+
+    // Notify all admins about the new order
+    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
+    for (const admin of admins) {
+      await db.insert(notificationsTable).values({
+        userId: admin.id,
+        title: "New Order Received",
+        message: `A new order #${order!.id} has been placed (₹${total.toFixed(2)})`,
+        type: "ORDER_UPDATE",
+        orderId: order!.id,
+      });
+    }
 
     return res.status(201).json(await enrichOrder(order!));
   } catch (err) {
@@ -245,6 +246,7 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       await db.update(trackingTable).set({ history }).where(eq(trackingTable.orderId, id));
     }
 
+    // Notify the customer
     await db.insert(notificationsTable).values({
       userId: existing.userId,
       title: "Order Update",
@@ -252,6 +254,79 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       type: "ORDER_UPDATE",
       orderId: id,
     });
+
+    // Notify all admin users
+    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
+    for (const admin of admins) {
+      if (admin.id !== existing.userId) {
+        await db.insert(notificationsTable).values({
+          userId: admin.id,
+          title: "Order Status Changed",
+          message: `Order #${id} is now: ${getStatusMessage(parsed.data.status)}`,
+          type: "ORDER_UPDATE",
+          orderId: id,
+        });
+      }
+    }
+
+    // When order is DELIVERED: credit coins earned + check referral bonus
+    if (parsed.data.status === "DELIVERED" && existing.status !== "DELIVERED") {
+      const coinsEarned = existing.coinsEarned ?? 0;
+      if (coinsEarned > 0) {
+        await db.update(usersTable)
+          .set({ superCoins: sql`${usersTable.superCoins} + ${coinsEarned}` })
+          .where(eq(usersTable.id, existing.userId));
+        await db.insert(coinTransactionsTable).values({
+          userId: existing.userId,
+          amount: coinsEarned,
+          reason: "ORDER_REWARD",
+          description: `Super Coins credited for Order #${id}`,
+          orderId: id,
+        });
+        await db.insert(notificationsTable).values({
+          userId: existing.userId,
+          title: "Super Coins Credited!",
+          message: `You earned ${coinsEarned} Super Coins from Order #${id}`,
+          type: "ORDER_UPDATE",
+          orderId: id,
+        });
+      }
+
+      // Check if this is the user's first completed order — award referrer bonus
+      const [orderUser] = await db.select().from(usersTable).where(eq(usersTable.id, existing.userId));
+      if (orderUser?.referredBy) {
+        const previousDeliveries = await db.select({ count: sql<number>`count(*)` })
+          .from(ordersTable)
+          .where(and(
+            eq(ordersTable.userId, existing.userId),
+            eq(ordersTable.status, "DELIVERED"),
+            ne(ordersTable.id, id),
+          ));
+        const prevCount = Number(previousDeliveries[0]?.count ?? 0);
+        if (prevCount === 0) {
+          // First ever delivered order — award referrer 100 coins
+          const REFERRAL_BONUS = 100;
+          await db.update(usersTable)
+            .set({ superCoins: sql`${usersTable.superCoins} + ${REFERRAL_BONUS}` })
+            .where(eq(usersTable.id, orderUser.referredBy));
+          await db.insert(coinTransactionsTable).values({
+            userId: orderUser.referredBy,
+            amount: REFERRAL_BONUS,
+            reason: "REFERRAL_BONUS",
+            description: `${orderUser.name ?? orderUser.email} completed their first order`,
+            referredUserId: existing.userId,
+            orderId: id,
+          });
+          await db.insert(notificationsTable).values({
+            userId: orderUser.referredBy,
+            title: "Referral Bonus Earned!",
+            message: `${orderUser.name ?? "Your friend"} placed their first order. You earned ${REFERRAL_BONUS} Super Coins!`,
+            type: "ORDER_UPDATE",
+            orderId: id,
+          });
+        }
+      }
+    }
 
     return res.json(await enrichOrder(order!));
   } catch (err) {
@@ -288,6 +363,59 @@ router.post("/:orderId/assign-agent", authenticateUser, requireAdmin, async (req
     return res.json(await enrichOrder(order));
   } catch (err) {
     req.log.error({ err }, "Failed to assign agent");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/:orderId/return", authenticateUser, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  const { reason, images } = req.body as { reason?: string; images?: string[] };
+  if (!reason?.trim()) return res.status(400).json({ error: "Return reason is required" });
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+    if (existing.userId !== req.userId && req.userRole !== "ADMIN") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (existing.status !== "DELIVERED") {
+      return res.status(400).json({ error: "Only delivered orders can be returned" });
+    }
+
+    // Update order status to mark return requested and store reason in notes
+    const returnNote = `RETURN_REQUESTED: ${reason.trim()}${images?.length ? ` | images: ${images.length}` : ""}`;
+    const [order] = await db.update(ordersTable)
+      .set({ status: "CANCELLED", notes: returnNote })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    // Notify customer
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Return Request Received",
+      message: `Your return request for Order #${id} has been submitted. We'll contact you within 24 hours.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    // Notify all admins
+    const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
+    for (const admin of admins) {
+      await db.insert(notificationsTable).values({
+        userId: admin.id,
+        title: "Return Request",
+        message: `Order #${id} has a return request: ${reason.trim().slice(0, 80)}`,
+        type: "ORDER_UPDATE",
+        orderId: id,
+      });
+    }
+
+    return res.json({ message: "Return request submitted", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to submit return");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -83,7 +83,7 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
     const newQty = cartQty + 1;
     if (newQty > product.stock) { toast.error("Not enough stock"); return; }
     updateCartItem.mutate(
-      { cartItemId: cartItem.id, data: { quantity: newQty } },
+      { itemId: cartItem.id, data: { quantity: newQty } },
       { onSuccess: invalidateCart, onError: () => toast.error("Failed to update cart") }
     );
   };
@@ -93,12 +93,12 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
     if (!cartItem) return;
     if (cartQty <= 1) {
       removeCartItem.mutate(
-        { cartItemId: cartItem.id },
+        { itemId: cartItem.id },
         { onSuccess: invalidateCart, onError: () => toast.error("Failed to remove from cart") }
       );
     } else {
       updateCartItem.mutate(
-        { cartItemId: cartItem.id, data: { quantity: cartQty - 1 } },
+        { itemId: cartItem.id, data: { quantity: cartQty - 1 } },
         { onSuccess: invalidateCart, onError: () => toast.error("Failed to update cart") }
       );
     }
@@ -141,10 +141,10 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
           {/* Image */}
           <div className="relative aspect-square overflow-hidden bg-muted">
             <img
-              src={product.images[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=400"}
+              src={product.images[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=600"}
               alt={product.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={e => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=400"; }}
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+              onError={e => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=600"; }}
             />
             {product.discount > 0 && (
               <Badge className="absolute top-2 left-2 bg-green-500 text-white border-0 text-[10px] font-bold">
