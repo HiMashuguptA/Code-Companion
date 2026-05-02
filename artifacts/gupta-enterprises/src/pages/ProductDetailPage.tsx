@@ -285,8 +285,8 @@ export function ProductDetailPage() {
 
           <div className="text-sm space-y-1.5 text-muted-foreground">
             <p>✅ Free delivery on orders over ₹500</p>
-            <p>📦 Usually ships in 1–2 business days</p>
-            <p>🔄 Easy returns within 7 days</p>
+            <p>📦 Usually delivered within 1–2 business days</p>
+            <p>🔄 Easy returns within 2 days of delivery</p>
           </div>
         </div>
       </div>

@@ -42,8 +42,8 @@ export function CategoryNavBar() {
     <div className="bg-card border-b sticky top-[57px] z-30">
       <div className="container mx-auto px-2 py-2 flex gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
         {items.map((c) => {
-          const href = `/products?category=${c.slug}`;
-          const active = location.startsWith(href);
+          const href = `/?category=${c.slug}`;
+          const active = location === "/" && new URLSearchParams(location.split("?")[1] ?? "").get("category") === c.slug || location.includes(`category=${c.slug}`);
           const icon = c.icon || FALLBACK_ICONS[c.slug] || "🛍️";
           return (
             <Link key={c.id} href={href}>

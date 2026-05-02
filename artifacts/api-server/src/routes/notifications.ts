@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { db, notificationsTable } from "@workspace/db";
+import { db, notificationsTable, usersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { authenticateUser, type AuthRequest } from "../middlewares/auth.js";
+import { authenticateUser, requireAdmin, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -49,6 +49,27 @@ router.put("/read-all", authenticateUser, async (req: AuthRequest, res) => {
     return res.json({ message: "All marked as read" });
   } catch (err) {
     req.log.error({ err }, "Failed to mark all notifications");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/broadcast", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const { title, message, type } = req.body as { title: string; message: string; type?: string };
+  if (!title || !message) return res.status(400).json({ error: "title and message are required" });
+
+  try {
+    const allUsers = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.isActive, true));
+    for (const user of allUsers) {
+      await db.insert(notificationsTable).values({
+        userId: user.id,
+        title,
+        message,
+        type: (type as "ORDER_UPDATE" | "PROMO" | "SYSTEM") ?? "PROMO",
+      });
+    }
+    return res.json({ message: `Notification sent to ${allUsers.length} users` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to broadcast notification");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

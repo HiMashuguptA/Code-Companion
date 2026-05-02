@@ -65,22 +65,14 @@ router.post("/register", async (req, res) => {
     }).returning();
 
     if (referredById && user) {
+      // Referee gets 50 coins immediately on sign-up
       await db.insert(coinTransactionsTable).values({
         userId: user.id,
         amount: REFEREE_BONUS,
         reason: "REFEREE_BONUS",
         description: `Welcome bonus for joining via referral`,
       });
-      await db.update(usersTable)
-        .set({ superCoins: (await getCoins(referredById)) + REFERRAL_BONUS })
-        .where(eq(usersTable.id, referredById));
-      await db.insert(coinTransactionsTable).values({
-        userId: referredById,
-        amount: REFERRAL_BONUS,
-        reason: "REFERRAL_BONUS",
-        description: `Friend ${user.name ?? user.email} joined`,
-        referredUserId: user.id,
-      });
+      // Referrer bonus (100 coins) is awarded ONLY when the referee's first order is DELIVERED (see orders route)
     }
 
     return res.json(formatUser(user!));

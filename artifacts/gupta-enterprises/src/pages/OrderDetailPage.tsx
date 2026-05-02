@@ -15,8 +15,9 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const markerIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -48,6 +49,11 @@ export function OrderDetailPage() {
   const orderId = params?.orderId ?? "";
   const qc = useQueryClient();
   const [showInvoice, setShowInvoice] = useState(false);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnImages, setReturnImages] = useState<string[]>([]);
+  const [returnPending, setReturnPending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: order, isLoading: orderLoading } = useGetOrder(orderId, {
     query: {
@@ -110,14 +116,40 @@ export function OrderDetailPage() {
   };
 
   const handleReturn = () => {
-    if (!confirm("Initiate return for this order? You'll receive a refund within 5–7 business days after pickup.")) return;
-    updateOrder.mutate({ orderId, data: { status: "CANCELLED" } }, {
-      onSuccess: () => {
-        toast.success("Return initiated. Our team will pick up the item soon.");
-        qc.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
-      },
-      onError: () => toast.error("Failed to initiate return"),
+    setReturnReason("");
+    setReturnImages([]);
+    setReturnDialogOpen(true);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    files.slice(0, 3 - returnImages.length).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        setReturnImages(prev => [...prev, ev.target!.result as string]);
+      };
+      reader.readAsDataURL(file);
     });
+  };
+
+  const handleSubmitReturn = async () => {
+    if (!returnReason.trim()) { toast.error("Please provide a return reason"); return; }
+    setReturnPending(true);
+    try {
+      await fetch(`/api/orders/${orderId}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reason: returnReason, images: returnImages }),
+      });
+      toast.success("Return request submitted. Our team will contact you shortly.");
+      setReturnDialogOpen(false);
+      qc.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
+    } catch {
+      toast.error("Failed to submit return request");
+    } finally {
+      setReturnPending(false);
+    }
   };
 
   const handlePrintInvoice = () => {
@@ -266,14 +298,14 @@ export function OrderDetailPage() {
       <div className="bg-card border rounded-2xl p-5 mb-4 shadow-sm">
         <h2 className="font-semibold mb-4">Items ({order.items?.length ?? 0})</h2>
         <div className="space-y-4">
-          {order.items?.map((item: { id: string; productId: string; product?: { name?: string; images?: string[] }; quantity: number; price: number }) => (
+          {order.items?.map((item: { id: string; productId: string; productName?: string; productImage?: string; product?: { name?: string; images?: string[] }; quantity: number; price: number }) => (
             <div key={item.id} className="flex gap-4">
-              <img src={item.product?.images?.[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=80"}
-                alt={item.product?.name}
-                className="w-16 h-16 rounded-xl object-cover border"
-                onError={e => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=80"; }} />
+              <img src={item.productImage ?? item.product?.images?.[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=200"}
+                alt={item.productName ?? item.product?.name}
+                className="w-16 h-16 rounded-xl object-contain border bg-muted"
+                onError={e => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=200"; }} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium line-clamp-2">{item.product?.name}</p>
+                <p className="text-sm font-medium line-clamp-2">{item.productName ?? item.product?.name}</p>
                 <p className="text-xs text-muted-foreground mt-1">Qty: {item.quantity} × {formatPrice(item.price)}</p>
               </div>
               <p className="font-semibold text-sm shrink-0">{formatPrice(item.price * item.quantity)}</p>
@@ -350,9 +382,9 @@ export function OrderDetailPage() {
                 <tr><th className="text-left py-2">Item</th><th className="text-right py-2">Qty</th><th className="text-right py-2">Price</th><th className="text-right py-2">Total</th></tr>
               </thead>
               <tbody>
-                {order.items?.map((it: { id: string; product?: { name?: string }; quantity: number; price: number }) => (
+                {order.items?.map((it: { id: string; productName?: string; product?: { name?: string }; quantity: number; price: number }) => (
                   <tr key={it.id} className="border-b">
-                    <td className="py-2">{it.product?.name}</td>
+                    <td className="py-2">{it.productName ?? it.product?.name}</td>
                     <td className="text-right py-2">{it.quantity}</td>
                     <td className="text-right py-2">{formatPrice(it.price)}</td>
                     <td className="text-right py-2">{formatPrice(it.price * it.quantity)}</td>
@@ -367,6 +399,66 @@ export function OrderDetailPage() {
           </div>
         </div>
       )}
+      {/* Return dialog */}
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Request Return</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">Please describe the reason for your return. Our team will contact you within 24 hours.</p>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Reason *</label>
+              <textarea
+                className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                rows={4}
+                placeholder="Describe why you want to return this order..."
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Photos (optional, max 3)</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-sm border border-dashed border-muted-foreground/40 rounded-lg hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={returnImages.length >= 3}
+              >
+                + Add Photos ({returnImages.length}/3)
+              </button>
+              {returnImages.length > 0 && (
+                <div className="flex gap-2 mt-2">
+                  {returnImages.map((img, i) => (
+                    <div key={i} className="relative">
+                      <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover border" />
+                      <button
+                        type="button"
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-white rounded-full text-[10px] flex items-center justify-center"
+                        onClick={() => setReturnImages(prev => prev.filter((_, j) => j !== i))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleSubmitReturn} disabled={returnPending} className="flex-1">
+                {returnPending ? "Submitting..." : "Submit Return Request"}
+              </Button>
+              <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
