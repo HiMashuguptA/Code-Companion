@@ -59,8 +59,8 @@ Recent additions:
   top-selling products with #1/#2/#3 medals, inventory insights (SKUs, stock units, value, low/out),
   and existing revenue + status charts.
 
-Dev workflow: `scripts/dev.sh` runs the api-server on port 8080 and the gupta-enterprises Vite
-dev server on port `19303` (the port the artifact proxy expects for `/`). The `Start application`
-workflow waits for port 8080 to come up.
+Dev workflow: `scripts/dev.sh` builds the api-server then runs it on port 8080, and runs the
+gupta-enterprises Vite dev server on port `5000` (Replit webview port). The `Start application`
+workflow waits for port 5000 to come up.
 
 Generated API client URLs already include the `/api` prefix, so `setBaseUrl(null)` is correct in dev — the proxy serves `/api/*` to api-server on port 8080.

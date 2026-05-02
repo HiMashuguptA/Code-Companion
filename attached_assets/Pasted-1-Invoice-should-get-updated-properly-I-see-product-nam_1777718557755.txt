@@ -1,0 +1,27 @@
+1. Invoice should get updated properly, I see product name is not coming up correctly and also product image is not coming up correctly, fix it.
+2. In order section, I don't the see the product image matching with the product that I've ordering although the price is same and also I want you to add the product name displaying within the order section too.
+3. search funcitionality is not working, while searching the product is not getting filtered and not coming up.
+4. Images that are uploaded and used should come up clear and high quality, but it comes up blur and also images should get adjusted and should come up full and fine in high quality without losing its quiality.
+5. In Refer & earn, when the refered user make his first order successful then the user will get 100 coins after 2 days when the return policy gets ended and in coin history after the refered user make his first order then 100 coins should show in pending within the history and shows that coins will be added after 2 days on successful order, should not get coins after just refering only, the referd friend will get 50 coin and refered 
+6. In home page while clicking on add to card button then after when I'm trying to increase the quantity then I see a error message that failed to update the cart and also I'm unable to decrease the quantity back to 0.
+7. when clicking on the category within the home page then it should show me all the products belong to that category, but it not reflecting anything after clicking on it.
+8. whenever I click on any of the products then I see these-
+✅ Free delivery on orders over ₹500
+
+📦 Usually ships in 1–2 business days
+
+🔄 Easy returns within 7 days
+
+please update these accordingly, which is free delivery on order above 500 within 15km.
+usually ships within same day
+Easy returns within 2 days
+
+9. when the user is returning any product within 2 days, user should upload few things like, returning reason, product images and this details will go to admin and after admin approval, the product return will be accepted and will be assign to delivery agent by the admin after approval and delivery agent will pick that order back and user can check the delivery agent location same like as we do order.
+
+10. on scrolling, the maps overlap within the UI where ever we are using map, usually in the home page map, when order is out and user is able to see delivery agent location via map there also while scrolling the map gets overlaps, and also in delivery_agents maps also the same issue.
+
+11. after completing a successful order the wallet coin should be updated 2 days when the return policy gets unavaible.
+
+12. admin should get notification when someone orders or returns any product or whenever delivery agent delivers the products.
+
+13. I need more control while creating coupons creating section by admin, I want admin can notify all the users with that coupons that he have created so that users get notified of the coupons, and admin can also send custom notification to the users.
