@@ -9,7 +9,6 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
 import { HomePage } from "@/pages/HomePage";
-import { ProductsPage } from "@/pages/ProductsPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { CartPage } from "@/pages/CartPage";
 import { CheckoutPage } from "@/pages/CheckoutPage";
@@ -77,7 +76,7 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={AuthPage} />
-      <Route path="/products" component={ProductsPage} />
+      <Route path="/products">{() => <ProductsRedirect />}</Route>
       <Route path="/products/:productId" component={ProductDetailPage} />
       <Route path="/cart" component={CartPage} />
       <Route path="/checkout" component={CheckoutPage} />
@@ -118,6 +117,15 @@ function Router() {
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+function ProductsRedirect() {
+  const [location, navigate] = useLocation();
+  useEffect(() => {
+    const qs = location.split("?")[1];
+    navigate(qs ? `/?${qs}` : "/", { replace: true });
+  }, [location, navigate]);
+  return null;
 }
 
 const PROTECTED_PREFIXES = ["/admin", "/account", "/orders", "/cart", "/checkout", "/favorites", "/profile"];

@@ -8,6 +8,7 @@ export const bannersTable = pgTable("banners", {
   subtitle: text("subtitle"),
   imageUrl: text("image_url").notNull(),
   linkUrl: text("link_url"),
+  productId: integer("product_id"),
   position: text("position", { enum: ["TOP", "MIDDLE", "BOTTOM"] }).notNull().default("TOP"),
   size: text("size", { enum: ["SMALL", "MEDIUM", "LARGE", "FULL"] }).notNull().default("FULL"),
   sortOrder: integer("sort_order").notNull().default(0),

@@ -13,6 +13,7 @@ import notificationsRouter from "./notifications.js";
 import analyticsRouter from "./analytics.js";
 import favoritesRouter from "./favorites.js";
 import bannersRouter from "./banners.js";
+import referralsRouter from "./referrals.js";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use("/notifications", notificationsRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/favorites", favoritesRouter);
 router.use("/banners", bannersRouter);
+router.use("/referrals", referralsRouter);
 
 export default router;

@@ -7,12 +7,17 @@ import { authenticateUser, requireAdmin, type AuthRequest } from "../middlewares
 const router = Router();
 
 function formatBanner(b: typeof bannersTable.$inferSelect) {
+  let resolvedLink = b.linkUrl;
+  if (b.productId) {
+    resolvedLink = `/products/${b.productId}`;
+  }
   return {
     id: String(b.id),
     title: b.title,
     subtitle: b.subtitle,
     imageUrl: b.imageUrl,
-    linkUrl: b.linkUrl,
+    linkUrl: resolvedLink,
+    productId: b.productId ? String(b.productId) : null,
     position: b.position,
     size: b.size,
     sortOrder: b.sortOrder,
@@ -22,7 +27,6 @@ function formatBanner(b: typeof bannersTable.$inferSelect) {
   };
 }
 
-// Public: list active banners, optional position filter
 router.get("/", async (req, res) => {
   try {
     const position = typeof req.query.position === "string" ? req.query.position : undefined;
@@ -30,11 +34,7 @@ router.get("/", async (req, res) => {
     if (position && ["TOP", "MIDDLE", "BOTTOM"].includes(position)) {
       conditions.push(eq(bannersTable.position, position as "TOP" | "MIDDLE" | "BOTTOM"));
     }
-    const rows = await db
-      .select()
-      .from(bannersTable)
-      .where(and(...conditions))
-      .orderBy(asc(bannersTable.sortOrder));
+    const rows = await db.select().from(bannersTable).where(and(...conditions)).orderBy(asc(bannersTable.sortOrder));
     return res.json(rows.map(formatBanner));
   } catch (err) {
     req.log.error({ err }, "Failed to list banners");
@@ -42,13 +42,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Admin: list all banners (active + inactive)
 router.get("/all", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const rows = await db
-      .select()
-      .from(bannersTable)
-      .orderBy(asc(bannersTable.sortOrder));
+    const rows = await db.select().from(bannersTable).orderBy(asc(bannersTable.sortOrder));
     return res.json(rows.map(formatBanner));
   } catch (err) {
     req.log.error({ err }, "Failed to list all banners");
@@ -66,6 +62,7 @@ router.post("/", authenticateUser, requireAdmin, async (req: AuthRequest, res) =
       subtitle: parsed.data.subtitle ?? null,
       imageUrl: parsed.data.imageUrl,
       linkUrl: parsed.data.linkUrl ?? null,
+      productId: parsed.data.productId ? parseInt(parsed.data.productId) : null,
       position: parsed.data.position,
       size: parsed.data.size ?? "FULL",
       sortOrder: parsed.data.sortOrder ?? 0,
@@ -92,6 +89,7 @@ router.put("/:bannerId", authenticateUser, requireAdmin, async (req: AuthRequest
     if (d.subtitle !== undefined) updates.subtitle = d.subtitle;
     if (d.imageUrl !== undefined) updates.imageUrl = d.imageUrl;
     if (d.linkUrl !== undefined) updates.linkUrl = d.linkUrl;
+    if (d.productId !== undefined) updates.productId = d.productId ? parseInt(d.productId) : null;
     if (d.position !== undefined) updates.position = d.position;
     if (d.size !== undefined) updates.size = d.size;
     if (d.sortOrder !== undefined) updates.sortOrder = d.sortOrder;

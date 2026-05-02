@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, usersTable, productsTable } from "@workspace/db";
-import { eq, sql, and, gte, lte } from "drizzle-orm";
+import { eq, sql, and, gte, lte, lt, desc } from "drizzle-orm";
 import { authenticateUser, requireAdmin, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
@@ -90,8 +90,46 @@ router.get("/revenue", authenticateUser, requireAdmin, async (req: AuthRequest, 
   }
 });
 
+router.get("/sales-range", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const { from, to } = req.query as { from?: string; to?: string };
+  if (!from || !to) return res.status(400).json({ error: "from and to dates are required (YYYY-MM-DD)" });
+
+  try {
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+
+    const results = await db.execute(sql`
+      SELECT
+        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') as date,
+        COALESCE(SUM(total), 0) as revenue,
+        COUNT(*) as orders
+      FROM orders
+      WHERE created_at >= ${fromDate} AND created_at <= ${toDate} AND payment_status = 'PAID'
+      GROUP BY TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+      ORDER BY date ASC
+    `);
+
+    const rowMap = new Map<string, { revenue: number; orders: number }>();
+    for (const r of results.rows as Array<Record<string, unknown>>) {
+      rowMap.set(String(r.date), { revenue: parseFloat(String(r.revenue)), orders: parseInt(String(r.orders)) });
+    }
+
+    const series: Array<{ date: string; revenue: number; orders: number }> = [];
+    for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      const v = rowMap.get(key) ?? { revenue: 0, orders: 0 };
+      series.push({ date: key, revenue: v.revenue, orders: v.orders });
+    }
+    return res.json(series);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get sales range");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/top-products", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
-  const { limit = "5" } = req.query as { limit?: string };
+  const { limit = "10" } = req.query as { limit?: string };
 
   try {
     const results = await db.execute(sql`
@@ -108,12 +146,13 @@ router.get("/top-products", authenticateUser, requireAdmin, async (req: AuthRequ
       LIMIT ${parseInt(limit)}
     `);
 
-    return res.json(results.rows.map((r: Record<string, unknown>) => ({
+    return res.json(results.rows.map((r: Record<string, unknown>, idx: number) => ({
       productId: r.product_id,
       name: r.name,
       image: r.image,
       totalSold: parseInt(String(r.total_sold)),
       revenue: parseFloat(String(r.revenue)),
+      rank: idx + 1,
     })));
   } catch (err) {
     req.log.error({ err }, "Failed to get top products");
@@ -140,6 +179,57 @@ router.get("/order-stats", authenticateUser, requireAdmin, async (req: AuthReque
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get order stats");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/low-stock", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const rows = await db.select().from(productsTable)
+      .where(and(eq(productsTable.isActive, true), lte(productsTable.stock, sql`${productsTable.lowStockThreshold}`)))
+      .orderBy(productsTable.stock);
+    return res.json(rows.map(p => ({
+      productId: String(p.id),
+      name: p.name,
+      image: p.images?.[0] ?? null,
+      stock: p.stock,
+      lowStockThreshold: p.lowStockThreshold,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get low stock");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/inventory", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const [skuCount] = await db.select({ count: sql<number>`count(*)` }).from(productsTable).where(eq(productsTable.isActive, true));
+    const [unitsResult] = await db.select({ total: sql<number>`coalesce(sum(stock),0)` }).from(productsTable).where(eq(productsTable.isActive, true));
+    const [outResult] = await db.select({ count: sql<number>`count(*)` }).from(productsTable).where(and(eq(productsTable.isActive, true), eq(productsTable.stock, 0)));
+    const [lowResult] = await db.select({ count: sql<number>`count(*)` }).from(productsTable).where(and(eq(productsTable.isActive, true), lte(productsTable.stock, sql`${productsTable.lowStockThreshold}`), sql`${productsTable.stock} > 0`));
+    const [valueResult] = await db.select({ total: sql<string>`coalesce(sum(stock * selling_price),0)` }).from(productsTable).where(eq(productsTable.isActive, true));
+
+    const top = await db.select().from(productsTable)
+      .where(eq(productsTable.isActive, true))
+      .orderBy(desc(productsTable.salesCount))
+      .limit(5);
+
+    return res.json({
+      totalSkus: Number(skuCount?.count ?? 0),
+      totalStockUnits: Number(unitsResult?.total ?? 0),
+      outOfStock: Number(outResult?.count ?? 0),
+      lowStock: Number(lowResult?.count ?? 0),
+      inventoryValue: parseFloat(String(valueResult?.total ?? "0")),
+      topRotating: top.map(p => ({
+        productId: String(p.id),
+        name: p.name,
+        image: p.images?.[0] ?? null,
+        totalSold: p.salesCount,
+        revenue: p.salesCount * parseFloat(String(p.sellingPrice)),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get inventory insights");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

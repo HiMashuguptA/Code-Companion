@@ -1,12 +1,23 @@
 import { Router } from "express";
-import { db, ordersTable, usersTable, cartsTable, productsTable, trackingTable, notificationsTable } from "@workspace/db";
+import {
+  db,
+  ordersTable,
+  usersTable,
+  cartsTable,
+  productsTable,
+  trackingTable,
+  notificationsTable,
+  coinTransactionsTable,
+} from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { CreateOrderBody, UpdateOrderBody, AssignDeliveryAgentBody } from "@workspace/api-zod";
 import { authenticateUser, requireAdmin, requireDeliveryAgent, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
 
-// List orders
+const COIN_VALUE = 1; // 1 coin = ₹1
+const REWARD_PCT = 0.02; // 2% of paid total back as coins
+
 router.get("/", authenticateUser, async (req: AuthRequest, res) => {
   const { status, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = parseInt(page);
@@ -37,37 +48,44 @@ router.get("/", authenticateUser, async (req: AuthRequest, res) => {
   }
 });
 
-// Create order
 router.post("/", authenticateUser, async (req: AuthRequest, res) => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
 
   try {
-    // Get cart
     const [cart] = await db.select().from(cartsTable).where(eq(cartsTable.userId, req.userId!));
     if (!cart) return res.status(400).json({ error: "Cart is empty" });
 
     const cartItems = cart.items as Array<{ id: string; productId: string; quantity: number; price: number }>;
     if (cartItems.length === 0) return res.status(400).json({ error: "Cart is empty" });
 
-    // Validate stock for all items before creating order
-    const productsToDecrement = [];
+    const productsToDecrement: Array<{ productId: number; quantity: number }> = [];
     for (const item of cartItems) {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(item.productId)));
-      if (!product) {
-        return res.status(400).json({ error: `Product ${item.productId} not found` });
-      }
+      if (!product) return res.status(400).json({ error: `Product ${item.productId} not found` });
       if ((product.stock ?? 0) < item.quantity) {
-        return res.status(400).json({ 
-          error: `Insufficient stock for "${product.name}". Available: ${product.stock ?? 0}, Requested: ${item.quantity}` 
+        return res.status(400).json({
+          error: `Insufficient stock for "${product.name}". Available: ${product.stock ?? 0}, Requested: ${item.quantity}`,
         });
       }
       productsToDecrement.push({ productId: parseInt(item.productId), quantity: item.quantity });
     }
 
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+    if (!user) return res.status(401).json({ error: "User not found" });
+
     const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    let couponDiscount = 0;
+    const couponDiscount = 0;
     const couponCode = cart.couponCode as string | null;
+    const deliveryFee = parsed.data.deliveryType === "DELIVERY" && subtotal < 500 ? 50 : 0;
+
+    const requestedCoins = Math.max(0, Math.floor(parsed.data.coinsToRedeem ?? 0));
+    const baseTotal = Math.max(0, subtotal - couponDiscount + deliveryFee);
+    const maxRedeem = Math.min(user.superCoins ?? 0, Math.floor(baseTotal * 0.5));
+    const coinsRedeemed = Math.min(requestedCoins, maxRedeem);
+    const coinDiscount = coinsRedeemed * COIN_VALUE;
+    const total = Math.max(0, baseTotal - coinDiscount);
+    const coinsEarned = Math.max(0, Math.floor(total * REWARD_PCT));
 
     const orderItems = await Promise.all(cartItems.map(async item => {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(item.productId)));
@@ -82,8 +100,7 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       };
     }));
 
-    const total = Math.max(0, subtotal - couponDiscount);
-    const estimatedDelivery = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // 2 days
+    const estimatedDelivery = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 
     const [order] = await db.insert(ordersTable).values({
       userId: req.userId!,
@@ -93,24 +110,52 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       deliveryAddress: parsed.data.deliveryAddress ?? null,
       contactDetails: parsed.data.contactDetails ?? null,
       subtotal: String(subtotal),
-      discount: "0",
+      discount: String(deliveryFee ? -deliveryFee : 0),
       couponDiscount: String(couponDiscount),
+      coinsRedeemed,
+      coinsEarned,
       total: String(total),
-      couponCode: couponCode,
+      couponCode,
       paymentStatus: "PAID",
       paymentMethod: parsed.data.paymentMethod,
       notes: parsed.data.notes ?? null,
       estimatedDelivery,
     }).returning();
 
-    // Decrement stock for all products
     for (const { productId, quantity } of productsToDecrement) {
       await db.update(productsTable)
-        .set({ stock: sql`${productsTable.stock} - ${quantity}` })
+        .set({
+          stock: sql`${productsTable.stock} - ${quantity}`,
+          salesCount: sql`${productsTable.salesCount} + ${quantity}`,
+        })
         .where(eq(productsTable.id, productId));
     }
 
-    // Create tracking entry
+    if (coinsRedeemed > 0) {
+      await db.update(usersTable)
+        .set({ superCoins: sql`${usersTable.superCoins} - ${coinsRedeemed}` })
+        .where(eq(usersTable.id, req.userId!));
+      await db.insert(coinTransactionsTable).values({
+        userId: req.userId!,
+        amount: -coinsRedeemed,
+        reason: "ORDER_REDEEM",
+        description: `Redeemed on Order #${order!.id}`,
+        orderId: order!.id,
+      });
+    }
+    if (coinsEarned > 0) {
+      await db.update(usersTable)
+        .set({ superCoins: sql`${usersTable.superCoins} + ${coinsEarned}` })
+        .where(eq(usersTable.id, req.userId!));
+      await db.insert(coinTransactionsTable).values({
+        userId: req.userId!,
+        amount: coinsEarned,
+        reason: "ORDER_REWARD",
+        description: `Earned on Order #${order!.id}`,
+        orderId: order!.id,
+      });
+    }
+
     const trackingPayload: typeof trackingTable.$inferInsert = {
       orderId: order!.id,
       destinationLat: parsed.data.deliveryAddress?.lat ? String(parsed.data.deliveryAddress.lat) : null,
@@ -119,10 +164,8 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
     };
     await db.insert(trackingTable).values(trackingPayload);
 
-    // Clear cart
     await db.update(cartsTable).set({ items: [], couponCode: null }).where(eq(cartsTable.userId, req.userId!));
 
-    // Create notification
     await db.insert(notificationsTable).values({
       userId: req.userId!,
       title: "Order Placed",
@@ -138,7 +181,6 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
   }
 });
 
-// Get delivery agent orders
 router.get("/delivery-agent", authenticateUser, requireDeliveryAgent, async (req: AuthRequest, res) => {
   try {
     const orders = await db.select().from(ordersTable)
@@ -152,7 +194,6 @@ router.get("/delivery-agent", authenticateUser, requireDeliveryAgent, async (req
   }
 });
 
-// Get single order
 router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
   const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
   const id = parseInt(orderId);
@@ -173,7 +214,6 @@ router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
   }
 });
 
-// Update order status
 router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
   const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
   const id = parseInt(orderId);
@@ -186,7 +226,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
     const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
     if (!existing) return res.status(404).json({ error: "Order not found" });
 
-    // Delivery agents can only update their assigned orders
     if (req.userRole === "DELIVERY_AGENT" && existing.deliveryAgentId !== req.userId) {
       return res.status(403).json({ error: "Forbidden" });
     }
@@ -199,7 +238,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       .where(eq(ordersTable.id, id))
       .returning();
 
-    // Add tracking event
     const [tracking] = await db.select().from(trackingTable).where(eq(trackingTable.orderId, id));
     if (tracking) {
       const history = (tracking.history as Array<unknown>) ?? [];
@@ -207,7 +245,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       await db.update(trackingTable).set({ history }).where(eq(trackingTable.orderId, id));
     }
 
-    // Notify user
     await db.insert(notificationsTable).values({
       userId: existing.userId,
       title: "Order Update",
@@ -223,7 +260,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
   }
 });
 
-// Assign delivery agent
 router.post("/:orderId/assign-agent", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
   const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
   const id = parseInt(orderId);
@@ -241,7 +277,6 @@ router.post("/:orderId/assign-agent", authenticateUser, requireAdmin, async (req
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    // Notify delivery agent
     await db.insert(notificationsTable).values({
       userId: agentId,
       title: "New Delivery Assignment",
@@ -275,12 +310,12 @@ function getStatusMessage(status: string) {
 async function enrichOrder(order: typeof ordersTable.$inferSelect) {
   let user = null;
   const [u] = await db.select().from(usersTable).where(eq(usersTable.id, order.userId));
-  if (u) user = { id: String(u.id), email: u.email, name: u.name, phone: u.phone, role: u.role, createdAt: u.createdAt };
+  if (u) user = { id: String(u.id), email: u.email, name: u.name, phone: u.phone, role: u.role, superCoins: u.superCoins ?? 0, createdAt: u.createdAt };
 
   let deliveryAgent = null;
   if (order.deliveryAgentId) {
     const [agent] = await db.select().from(usersTable).where(eq(usersTable.id, order.deliveryAgentId));
-    if (agent) deliveryAgent = { id: String(agent.id), email: agent.email, name: agent.name, phone: agent.phone, role: agent.role, createdAt: agent.createdAt };
+    if (agent) deliveryAgent = { id: String(agent.id), email: agent.email, name: agent.name, phone: agent.phone, role: agent.role, superCoins: agent.superCoins ?? 0, createdAt: agent.createdAt };
   }
 
   return {
@@ -291,9 +326,12 @@ async function enrichOrder(order: typeof ordersTable.$inferSelect) {
     status: order.status,
     deliveryType: order.deliveryType,
     deliveryAddress: order.deliveryAddress,
+    contactDetails: order.contactDetails,
     subtotal: parseFloat(String(order.subtotal)),
     discount: parseFloat(String(order.discount)),
     couponDiscount: parseFloat(String(order.couponDiscount)),
+    coinsRedeemed: order.coinsRedeemed ?? 0,
+    coinsEarned: order.coinsEarned ?? 0,
     total: parseFloat(String(order.total)),
     couponCode: order.couponCode,
     deliveryAgentId: order.deliveryAgentId ? String(order.deliveryAgentId) : null,

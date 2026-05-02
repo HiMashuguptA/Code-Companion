@@ -1,36 +1,57 @@
 import { Router } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, coinTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { RegisterUserBody, UpdateProfileBody } from "@workspace/api-zod";
 import { authenticateUser, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
 
-// Register or sync Firebase user
+const REFEREE_BONUS = 50;
+const REFERRAL_BONUS = 100;
+
+function genReferralCode(seed: string) {
+  const base = seed.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const slice = (base.slice(0, 4) || "GUPT").padEnd(4, "X");
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${slice}${suffix}`;
+}
+
+async function uniqueReferralCode(seed: string) {
+  for (let i = 0; i < 8; i++) {
+    const code = genReferralCode(seed);
+    const existing = await db.select().from(usersTable).where(eq(usersTable.referralCode, code));
+    if (existing.length === 0) return code;
+  }
+  return `GUPT${Date.now().toString(36).toUpperCase()}`;
+}
+
 router.post("/register", async (req, res) => {
-  console.log("🔵 [AUTH] Register endpoint called");
-  console.log("📦 Request body:", req.body);
-  
   const parsed = RegisterUserBody.safeParse(req.body);
   if (!parsed.success) {
-    console.log("❌ [AUTH] Validation failed:", parsed.error.issues);
     return res.status(400).json({ error: parsed.error.issues });
   }
-  
-  const { firebaseUid, email, name, phone, photoUrl } = parsed.data;
-  console.log("✅ [AUTH] Validation passed for user:", email, firebaseUid);
+
+  const { firebaseUid, email, name, phone, photoUrl, referralCode } = parsed.data;
 
   try {
     const existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, firebaseUid));
-    console.log("🔍 [AUTH] Existing user check:", existing.length > 0 ? "FOUND" : "NOT FOUND");
-
     if (existing.length > 0) {
-      const [user] = existing;
-      console.log("📝 [AUTH] Returning existing user:", user.id, user.email);
-      return res.json(formatUser(user!));
+      let user = existing[0]!;
+      if (!user.referralCode) {
+        const code = await uniqueReferralCode(name ?? email);
+        const [updated] = await db.update(usersTable).set({ referralCode: code }).where(eq(usersTable.id, user.id)).returning();
+        if (updated) user = updated;
+      }
+      return res.json(formatUser(user));
     }
 
-    console.log("🆕 [AUTH] Creating new user...");
+    let referredById: number | null = null;
+    if (referralCode) {
+      const [refUser] = await db.select().from(usersTable).where(eq(usersTable.referralCode, referralCode.toUpperCase()));
+      if (refUser) referredById = refUser.id;
+    }
+
+    const newCode = await uniqueReferralCode(name ?? email);
     const [user] = await db.insert(usersTable).values({
       firebaseUid,
       email,
@@ -38,18 +59,43 @@ router.post("/register", async (req, res) => {
       phone: phone ?? null,
       photoUrl: photoUrl ?? null,
       role: "USER",
+      referralCode: newCode,
+      referredBy: referredById,
+      superCoins: referredById ? REFEREE_BONUS : 0,
     }).returning();
 
-    console.log("✨ [AUTH] User created successfully:", user.id, user.email);
+    if (referredById && user) {
+      await db.insert(coinTransactionsTable).values({
+        userId: user.id,
+        amount: REFEREE_BONUS,
+        reason: "REFEREE_BONUS",
+        description: `Welcome bonus for joining via referral`,
+      });
+      await db.update(usersTable)
+        .set({ superCoins: (await getCoins(referredById)) + REFERRAL_BONUS })
+        .where(eq(usersTable.id, referredById));
+      await db.insert(coinTransactionsTable).values({
+        userId: referredById,
+        amount: REFERRAL_BONUS,
+        reason: "REFERRAL_BONUS",
+        description: `Friend ${user.name ?? user.email} joined`,
+        referredUserId: user.id,
+      });
+    }
+
     return res.json(formatUser(user!));
   } catch (err) {
-    console.error("💥 [AUTH] Error registering user:", err);
+    console.error("Error registering user:", err);
     req.log.error({ err }, "Failed to register user");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Get current user profile
+async function getCoins(userId: number) {
+  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  return u?.superCoins ?? 0;
+}
+
 router.get("/profile", authenticateUser, async (req: AuthRequest, res) => {
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
@@ -61,7 +107,6 @@ router.get("/profile", authenticateUser, async (req: AuthRequest, res) => {
   }
 });
 
-// Update profile
 router.put("/profile", authenticateUser, async (req: AuthRequest, res) => {
   const parsed = UpdateProfileBody.safeParse(req.body);
   if (!parsed.success) {
@@ -97,6 +142,9 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     role: user.role,
     photoUrl: user.photoUrl,
     addresses: user.addresses ?? [],
+    superCoins: user.superCoins ?? 0,
+    referralCode: user.referralCode,
+    referredBy: user.referredBy ? String(user.referredBy) : null,
     createdAt: user.createdAt,
   };
 }

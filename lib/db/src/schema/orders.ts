@@ -11,10 +11,12 @@ export const ordersTable = pgTable("orders", {
   }).notNull().default("PENDING"),
   deliveryType: text("delivery_type", { enum: ["DELIVERY", "PICKUP"] }).notNull().default("DELIVERY"),
   deliveryAddress: jsonb("delivery_address"),
-  contactDetails: jsonb("contact_details"), // Store phone and name for delivery agent
+  contactDetails: jsonb("contact_details"),
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
   discount: numeric("discount", { precision: 10, scale: 2 }).notNull().default("0"),
   couponDiscount: numeric("coupon_discount", { precision: 10, scale: 2 }).notNull().default("0"),
+  coinsRedeemed: integer("coins_redeemed").notNull().default(0),
+  coinsEarned: integer("coins_earned").notNull().default(0),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
   couponCode: text("coupon_code"),
   deliveryAgentId: integer("delivery_agent_id"),
