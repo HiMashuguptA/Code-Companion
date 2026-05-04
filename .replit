@@ -8,7 +8,7 @@ id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
-deploymentTarget = "autoscale"
+deploymentTarget = "cloudrun"
 run = ["bash", "scripts/start.sh"]
 build = ["bash", "scripts/build.sh"]
 
