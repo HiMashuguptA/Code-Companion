@@ -29,6 +29,7 @@ import { AdminCategories } from "@/pages/admin/AdminCategories";
 import { AdminCoupons } from "@/pages/admin/AdminCoupons";
 import { AdminBanners } from "@/pages/admin/AdminBanners";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
+import { AdminReturns } from "@/pages/admin/AdminReturns";
 
 import NotFound from "@/pages/not-found";
 
@@ -112,6 +113,9 @@ function Router() {
       </Route>
       <Route path="/admin/users">
         <AdminLayout><AdminUsers /></AdminLayout>
+      </Route>
+      <Route path="/admin/returns">
+        <AdminLayout><AdminReturns /></AdminLayout>
       </Route>
 
       <Route component={NotFound} />

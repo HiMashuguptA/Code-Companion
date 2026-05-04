@@ -38,7 +38,7 @@ export function Navbar() {
     query: { queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false }
   });
   const { data: notifications } = useListNotifications({
-    query: { queryKey: getListNotificationsQueryKey(), enabled: !!currentUser, retry: false }
+    query: { queryKey: getListNotificationsQueryKey(), enabled: !!currentUser, retry: false, refetchInterval: 5000 }
   });
   const markAllRead = useMarkAllNotificationsRead();
 
