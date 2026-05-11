@@ -6,7 +6,7 @@ export const coinTransactionsTable = pgTable("coin_transactions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   amount: integer("amount").notNull(),
-  reason: text("reason", { enum: ["REFERRAL_BONUS", "REFEREE_BONUS", "ORDER_REWARD", "ORDER_REDEEM", "ADMIN_ADJUST"] }).notNull(),
+  reason: text("reason", { enum: ["REFERRAL_BONUS", "REFEREE_BONUS", "ORDER_REWARD", "ORDER_REDEEM", "ADMIN_ADJUST", "ORDER_REFUND"] }).notNull(),
   description: text("description"),
   orderId: integer("order_id"),
   referredUserId: integer("referred_user_id"),

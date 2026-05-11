@@ -301,6 +301,44 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       }
     }
 
+    // When order is CANCELLED: refund redeemed coins + restore product stock
+    if (parsed.data.status === "CANCELLED" && existing.status !== "CANCELLED") {
+      const coinsToRefund = existing.coinsRedeemed ?? 0;
+      if (coinsToRefund > 0) {
+        await db.update(usersTable)
+          .set({ superCoins: sql`${usersTable.superCoins} + ${coinsToRefund}` })
+          .where(eq(usersTable.id, existing.userId));
+        await db.insert(coinTransactionsTable).values({
+          userId: existing.userId,
+          amount: coinsToRefund,
+          reason: "ORDER_REFUND",
+          description: `Super Coins refunded for cancelled Order #${id}`,
+          orderId: id,
+        });
+        await db.insert(notificationsTable).values({
+          userId: existing.userId,
+          title: "Super Coins Refunded",
+          message: `${coinsToRefund} Super Coins have been returned to your wallet as Order #${id} was cancelled.`,
+          type: "ORDER_UPDATE",
+          orderId: id,
+        });
+      }
+
+      // Restore product stock
+      const cancelledItems = existing.items as Array<{ productId: string; quantity: number }>;
+      for (const item of cancelledItems) {
+        const pid = parseInt(item.productId);
+        if (!isNaN(pid)) {
+          await db.update(productsTable)
+            .set({
+              stock: sql`${productsTable.stock} + ${item.quantity}`,
+              salesCount: sql`GREATEST(0, ${productsTable.salesCount} - ${item.quantity})`,
+            })
+            .where(eq(productsTable.id, pid));
+        }
+      }
+    }
+
     // When order is DELIVERED: credit coins earned + check referral bonus
     if (parsed.data.status === "DELIVERED" && existing.status !== "DELIVERED") {
       const coinsEarned = existing.coinsEarned ?? 0;

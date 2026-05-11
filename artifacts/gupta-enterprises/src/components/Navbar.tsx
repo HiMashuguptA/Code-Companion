@@ -35,17 +35,20 @@ export function Navbar() {
     setSearchQuery(s);
   }, [location]);
 
-  // Debounced live search — navigate on every keystroke after 350ms
+  // Debounced live search — navigate on every keystroke after 350ms, preserving category
   useEffect(() => {
     if (skipDebounceRef.current) {
       skipDebounceRef.current = false;
       return;
     }
     const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
-      } else if (location === "/" || location.startsWith("/?")) {
-        navigate("/");
+      const currentCategory = new URLSearchParams(window.location.search).get("category") ?? "";
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+      if (currentCategory) params.set("category", currentCategory);
+      const qs = params.toString();
+      if (qs || location === "/" || location.startsWith("/?")) {
+        navigate(qs ? `/?${qs}` : "/");
       }
     }, 350);
     return () => clearTimeout(timer);
@@ -67,8 +70,12 @@ export function Navbar() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
-    else navigate("/");
+    const currentCategory = new URLSearchParams(window.location.search).get("category") ?? "";
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (currentCategory) params.set("category", currentCategory);
+    const qs = params.toString();
+    navigate(qs ? `/?${qs}` : "/");
   };
 
   const handleRefreshProfile = async () => {

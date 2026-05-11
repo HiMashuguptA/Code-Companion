@@ -141,17 +141,24 @@ export function OrderDetailPage() {
     if (!returnReason.trim()) { toast.error("Please provide a return reason"); return; }
     setReturnPending(true);
     try {
-      await fetch(`/api/orders/${orderId}/return`, {
+      const token = await currentUser?.getIdToken();
+      const res = await fetch(`/api/orders/${orderId}/return`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ reason: returnReason, images: returnImages }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error ?? "Failed to submit");
+      }
       toast.success("Return request submitted. Our team will contact you shortly.");
       setReturnDialogOpen(false);
       qc.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
-    } catch {
-      toast.error("Failed to submit return request");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit return request");
     } finally {
       setReturnPending(false);
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useLocationSearch } from "@/hooks/useLocationSearch";
 import { ArrowRight, MapPin, Phone, Mail, Clock, SlidersHorizontal, X, Tag, Sparkles, Flame, Star, Heart, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ type SortKey = "newest" | "price_asc" | "price_desc" | "popularity" | "discount"
 
 export function HomePage() {
   const locationSearch = useLocationSearch();
+  const [, navigate] = useLocation();
   const { currentUser } = useAuth();
 
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("search") ?? "");
@@ -145,6 +146,7 @@ export function HomePage() {
     setSelectedTags([]);
     setSort("newest");
     setPage(1);
+    navigate("/");
   };
 
   const hasFilters = !!(search || category || minPrice || maxPrice || inStock || selectedTags.length);
@@ -157,12 +159,23 @@ export function HomePage() {
         <div className="flex flex-col gap-1">
           <button
             className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors ${!category ? "bg-[#2874F0] text-white" : "hover:bg-muted"}`}
-            onClick={() => { setCategory(""); setPage(1); setFilterOpen(false); }}
+            onClick={() => {
+              setCategory(""); setPage(1); setFilterOpen(false);
+              const p = new URLSearchParams();
+              if (search) p.set("search", search);
+              navigate(p.toString() ? `/?${p.toString()}` : "/");
+            }}
           >All Categories</button>
           {categoriesArray.map((cat: Category) => (
             <button key={cat.id}
               className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors ${category === cat.slug ? "bg-[#2874F0] text-white" : "hover:bg-muted"}`}
-              onClick={() => { setCategory(cat.slug); setPage(1); setFilterOpen(false); }}>
+              onClick={() => {
+                setCategory(cat.slug); setPage(1); setFilterOpen(false);
+                const p = new URLSearchParams();
+                p.set("category", cat.slug);
+                if (search) p.set("search", search);
+                navigate(`/?${p.toString()}`);
+              }}>
               {cat.name}{cat.productCount !== undefined && <span className="ml-1 opacity-60">({cat.productCount})</span>}
             </button>
           ))}
@@ -344,8 +357,18 @@ export function HomePage() {
           {/* Active filter chips */}
           {hasFilters && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="flex flex-wrap gap-2 mb-3">
-              {search && <Chip label={`"${search}"`} onClear={() => setSearch("")} />}
-              {category && <Chip label={categoriesArray.find(c => c.slug === category)?.name ?? category} onClear={() => setCategory("")} />}
+              {search && <Chip label={`"${search}"`} onClear={() => {
+                setSearch("");
+                const p = new URLSearchParams();
+                if (category) p.set("category", category);
+                navigate(p.toString() ? `/?${p.toString()}` : "/");
+              }} />}
+              {category && <Chip label={categoriesArray.find(c => c.slug === category)?.name ?? category} onClear={() => {
+                setCategory("");
+                const p = new URLSearchParams();
+                if (search) p.set("search", search);
+                navigate(p.toString() ? `/?${p.toString()}` : "/");
+              }} />}
               {selectedTags.map(t => <Chip key={t} label={t} onClear={() => toggleTag(t)} />)}
               {minPrice && <Chip label={`Min ₹${minPrice}`} onClear={() => setMinPrice("")} />}
               {maxPrice && <Chip label={`Max ₹${maxPrice}`} onClear={() => setMaxPrice("")} />}
