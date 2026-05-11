@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Coupon } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/FirebaseContext";
+import { auth } from "@/contexts/FirebaseContext";
 import { useLocation } from "wouter";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
@@ -138,11 +139,11 @@ export function AdminCoupons() {
     }
     setBroadcastPending(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/notifications/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ ...broadcastForm, type: "PROMO" }),
-        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");

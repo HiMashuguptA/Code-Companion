@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
+import { useLocationSearch } from "@/hooks/useLocationSearch";
 import { ArrowRight, MapPin, Phone, Mail, Clock, SlidersHorizontal, X, Tag, Sparkles, Flame, Star, Heart, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,12 +32,11 @@ const shopIcon = L.divIcon({
 type SortKey = "newest" | "price_asc" | "price_desc" | "popularity" | "discount";
 
 export function HomePage() {
-  const [location] = useLocation();
+  const locationSearch = useLocationSearch();
   const { currentUser } = useAuth();
-  const params = useMemo(() => new URLSearchParams(location.split("?")[1] ?? ""), [location]);
 
-  const [search, setSearch] = useState(params.get("search") ?? "");
-  const [category, setCategory] = useState(params.get("category") ?? "");
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("search") ?? "");
+  const [category, setCategory] = useState(() => new URLSearchParams(window.location.search).get("category") ?? "");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [inStock, setInStock] = useState(false);
@@ -46,12 +46,11 @@ export function HomePage() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
-    const s = params.get("search");
-    if (s !== null) setSearch(s);
-    const c = params.get("category");
-    if (c !== null) setCategory(c);
+    const sp = new URLSearchParams(locationSearch);
+    setSearch(sp.get("search") ?? "");
+    setCategory(sp.get("category") ?? "");
     setPage(1);
-  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [locationSearch]);
 
   const baseQuery = {
     search: search || undefined,

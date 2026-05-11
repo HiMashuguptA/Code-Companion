@@ -74,7 +74,7 @@ export function AdminBanners() {
     reader.onload = evt => {
       const img = new Image();
       img.onload = () => {
-        // Banners are wide: target 1400×525 (roughly 8:3 aspect), quality 0.85
+        // Banners are wide: cap at 1400×525 only if larger, preserve quality at 0.95
         const TARGET_W = 1400, TARGET_H = 525;
         const scale = Math.min(TARGET_W / img.width, TARGET_H / img.height, 1);
         const canvas = document.createElement("canvas");
@@ -83,7 +83,7 @@ export function AdminBanners() {
         const ctx = canvas.getContext("2d");
         if (!ctx) { setUploading(false); return; }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
         setForm(f => ({ ...f, imageUrl: dataUrl }));
         setUploading(false);
       };
@@ -276,7 +276,7 @@ export function AdminBanners() {
               <Label htmlFor="b-product">Link to Product (recommended)</Label>
               <Select value={form.productId || "__none"} onValueChange={v => setForm(f => ({ ...f, productId: v === "__none" ? "" : v }))}>
                 <SelectTrigger><SelectValue placeholder="No product (use custom URL)" /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-60 overflow-y-auto">
                   <SelectItem value="__none">— No product (use custom URL below) —</SelectItem>
                   {products.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>

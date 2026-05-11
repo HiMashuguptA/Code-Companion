@@ -420,6 +420,82 @@ router.post("/:orderId/return", authenticateUser, async (req: AuthRequest, res) 
   }
 });
 
+router.post("/:orderId/return-approve", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+
+    const currentNotes = existing.notes ?? "";
+    if (!currentNotes.startsWith("RETURN_REQUESTED:")) {
+      return res.status(400).json({ error: "This order does not have a pending return request" });
+    }
+
+    const newNotes = currentNotes.replace(/^RETURN_REQUESTED:/, "RETURN_APPROVED:");
+    const [order] = await db.update(ordersTable)
+      .set({ notes: newNotes })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Return Request Approved",
+      message: `Your return request for Order #${id} has been approved. Our team will contact you to arrange the pickup and refund.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    return res.json({ message: "Return approved and customer notified", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to approve return");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/:orderId/return-reject", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  const { message: rejectionMsg } = req.body as { message?: string };
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+
+    const currentNotes = existing.notes ?? "";
+    if (!currentNotes.startsWith("RETURN_REQUESTED:")) {
+      return res.status(400).json({ error: "This order does not have a pending return request" });
+    }
+
+    const newNotes = currentNotes.replace(/^RETURN_REQUESTED:/, "RETURN_REJECTED:");
+    const [order] = await db.update(ordersTable)
+      .set({ notes: newNotes })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    const notifMsg = rejectionMsg?.trim()
+      ? `Your return request for Order #${id} could not be approved: ${rejectionMsg.trim()}`
+      : `Your return request for Order #${id} has been reviewed and unfortunately cannot be approved at this time.`;
+
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Return Request Update",
+      message: notifMsg,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    return res.json({ message: "Return rejected and customer notified", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reject return");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function getStatusMessage(status: string) {
   const messages: Record<string, string> = {
     PENDING: "Order placed",

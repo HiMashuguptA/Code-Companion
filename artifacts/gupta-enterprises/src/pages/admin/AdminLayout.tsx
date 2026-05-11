@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw, Image as ImageIcon } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw, Image as ImageIcon, RotateCcw } from "lucide-react";
 import { useAuth } from "@/contexts/FirebaseContext";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo } from "react";
@@ -11,6 +11,7 @@ interface AdminLayoutProps {
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/admin/returns", label: "Returns", icon: RotateCcw },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/users", label: "Users", icon: Users },
