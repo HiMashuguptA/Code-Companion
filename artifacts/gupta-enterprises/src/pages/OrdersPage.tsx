@@ -82,7 +82,7 @@ export function OrdersPage() {
               className="w-full bg-card border rounded-xl p-4 hover:shadow-md transition-all text-left group">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="font-medium text-sm">Order #{order.id.slice(-8).toUpperCase()}</p>
+                  <p className="font-medium text-sm">Order #{(order as { userOrderNumber?: number }).userOrderNumber ?? order.id}</p>
                   <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -92,10 +92,10 @@ export function OrdersPage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <div className="flex -space-x-2">
-                  {order.items?.slice(0, 3).map((item: { id: string; product?: { images?: string[]; name?: string } }) => (
+                  {order.items?.slice(0, 3).map((item: { id: string; productImage?: string; productName?: string; product?: { images?: string[]; name?: string } }) => (
                     <img key={item.id}
-                      src={item.product?.images?.[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=60"}
-                      alt={item.product?.name ?? "Product"}
+                      src={item.productImage ?? item.product?.images?.[0] ?? "https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=60"}
+                      alt={item.productName ?? item.product?.name ?? "Product"}
                       className="w-9 h-9 rounded-lg object-cover border-2 border-background" />
                   ))}
                   {(order.items?.length ?? 0) > 3 && (

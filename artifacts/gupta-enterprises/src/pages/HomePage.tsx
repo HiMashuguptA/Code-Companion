@@ -224,8 +224,8 @@ export function HomePage() {
         <CategoryNavBar />
       </div>
 
-      {/* Top carousel banner */}
-      <BannerSection position="TOP" />
+      {/* Top carousel banner — hidden when searching/filtering */}
+      {!hasFilters && <BannerSection position="TOP" />}
 
       {/* Product Rails — only when not actively searching */}
       {!hasFilters && (
@@ -266,8 +266,8 @@ export function HomePage() {
         </div>
       )}
 
-      {/* Middle banner */}
-      <BannerSection position="MIDDLE" />
+      {/* Middle banner — hidden when searching/filtering */}
+      {!hasFilters && <BannerSection position="MIDDLE" />}
 
       {/* All Products Section — no persistent sidebar */}
       <section className="container mx-auto px-2 sm:px-4 py-3">
@@ -423,8 +423,8 @@ export function HomePage() {
       {/* Recently Viewed */}
       <RecentlyViewedRail />
 
-      {/* Bottom banners */}
-      <BannerSection position="BOTTOM" />
+      {/* Bottom banners — hidden when searching/filtering */}
+      {!hasFilters && <BannerSection position="BOTTOM" />}
 
       {/* About + Map */}
       <section className="container mx-auto px-2 sm:px-4 py-6">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart, Gift, Phone, Coins } from "lucide-react";
@@ -25,13 +25,31 @@ export function Navbar() {
     return params.get("search") ?? "";
   });
   const [isRefetching, setIsRefetching] = useState(false);
+  const skipDebounceRef = useRef(false);
 
   // Sync search query from URL when navigating (e.g. back/forward)
   useEffect(() => {
     const params = new URLSearchParams(location.includes("?") ? location.split("?")[1] : "");
     const s = params.get("search") ?? "";
+    skipDebounceRef.current = true;
     setSearchQuery(s);
   }, [location]);
+
+  // Debounced live search — navigate on every keystroke after 350ms
+  useEffect(() => {
+    if (skipDebounceRef.current) {
+      skipDebounceRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
+      } else if (location === "/" || location.startsWith("/?")) {
+        navigate("/");
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
   const qc = useQueryClient();
 
   const { data: cart } = useGetCart({

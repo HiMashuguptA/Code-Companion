@@ -62,8 +62,9 @@ export function BannerSection({ position, className = "" }: BannerSectionProps) 
           const inner = (
             <div className={`relative w-full overflow-hidden rounded-2xl group cursor-pointer ${sizeClasses[b.size]}`}>
               <img src={b.imageUrl} alt={b.title}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                loading="lazy" />
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+                decoding="async" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
               <div className="relative h-full flex flex-col justify-center p-5 sm:p-8 text-white max-w-md">
                 <h3 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight drop-shadow">{b.title}</h3>

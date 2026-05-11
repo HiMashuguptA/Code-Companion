@@ -8,8 +8,9 @@ import {
   trackingTable,
   notificationsTable,
   coinTransactionsTable,
+  couponsTable,
 } from "@workspace/db";
-import { eq, and, sql, desc, ne } from "drizzle-orm";
+import { eq, and, sql, desc, asc, lte, ne } from "drizzle-orm";
 import { CreateOrderBody, UpdateOrderBody, AssignDeliveryAgentBody } from "@workspace/api-zod";
 import { authenticateUser, requireAdmin, requireDeliveryAgent, type AuthRequest } from "../middlewares/auth.js";
 
@@ -33,7 +34,18 @@ router.get("/", authenticateUser, async (req: AuthRequest, res) => {
     const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(whereClause);
     const total = Number(countResult?.count ?? 0);
 
-    const enriched = await Promise.all(orders.map(o => enrichOrder(o)));
+    // Build per-user sequential order number map for non-admin users
+    const userOrderNumberMap = new Map<number, number>();
+    if (req.userRole !== "ADMIN" && req.userId) {
+      const allUserOrders = await db
+        .select({ id: ordersTable.id })
+        .from(ordersTable)
+        .where(eq(ordersTable.userId, req.userId))
+        .orderBy(asc(ordersTable.createdAt));
+      allUserOrders.forEach((o, i) => userOrderNumberMap.set(o.id, i + 1));
+    }
+
+    const enriched = await Promise.all(orders.map(o => enrichOrder(o, userOrderNumberMap.get(o.id))));
 
     return res.json({
       orders: enriched,
@@ -143,6 +155,13 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
         orderId: order!.id,
       });
     }
+    // Increment coupon usageCount if a coupon was used
+    if (couponCode) {
+      await db.update(couponsTable)
+        .set({ usageCount: sql`${couponsTable.usageCount} + 1` })
+        .where(eq(couponsTable.code, couponCode));
+    }
+
     // coinsEarned are recorded but NOT credited until order is DELIVERED
 
     const trackingPayload: typeof trackingTable.$inferInsert = {
@@ -208,7 +227,20 @@ router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    return res.json(await enrichOrder(order));
+    // Compute user's sequential order number
+    let userOrderNumber: number | undefined;
+    if (req.userRole !== "ADMIN") {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(ordersTable)
+        .where(and(
+          eq(ordersTable.userId, order.userId),
+          lte(ordersTable.createdAt, order.createdAt),
+        ));
+      userOrderNumber = Number(count);
+    }
+
+    return res.json(await enrichOrder(order, userOrderNumber));
   } catch (err) {
     req.log.error({ err }, "Failed to get order");
     return res.status(500).json({ error: "Internal server error" });
@@ -511,7 +543,7 @@ function getStatusMessage(status: string) {
   return messages[status] ?? status;
 }
 
-async function enrichOrder(order: typeof ordersTable.$inferSelect) {
+async function enrichOrder(order: typeof ordersTable.$inferSelect, userOrderNumber?: number) {
   let user = null;
   const [u] = await db.select().from(usersTable).where(eq(usersTable.id, order.userId));
   if (u) user = { id: String(u.id), email: u.email, name: u.name, phone: u.phone, role: u.role, superCoins: u.superCoins ?? 0, createdAt: u.createdAt };
@@ -525,6 +557,7 @@ async function enrichOrder(order: typeof ordersTable.$inferSelect) {
   return {
     id: String(order.id),
     userId: String(order.userId),
+    userOrderNumber: userOrderNumber ?? null,
     user,
     items: order.items,
     status: order.status,

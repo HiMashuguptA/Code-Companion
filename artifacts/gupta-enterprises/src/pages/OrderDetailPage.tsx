@@ -103,7 +103,12 @@ export function OrderDetailPage() {
   const deliveredDate = order.status === "DELIVERED" && order.updatedAt ? new Date(order.updatedAt) : null;
   const returnEnd = deliveredDate ? new Date(deliveredDate.getTime() + 2 * 24 * 60 * 60 * 1000) : null;
   const canReturn = order.status === "DELIVERED" && returnEnd && new Date() < returnEnd;
-  const isReturnable = (order.status as string) === "RETURNED" ? false : canReturn;
+  const hasReturnRequest = !!(order.notes && (
+    (order.notes as string).startsWith("RETURN_REQUESTED:") ||
+    (order.notes as string).startsWith("RETURN_APPROVED:") ||
+    (order.notes as string).startsWith("RETURN_REJECTED:")
+  ));
+  const isReturnable = !hasReturnRequest && canReturn;
 
   const handleCancel = () => {
     updateOrder.mutate({ orderId, data: { status: "CANCELLED" } }, {
@@ -178,7 +183,7 @@ export function OrderDetailPage() {
       <div className="bg-card border rounded-2xl p-5 mb-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
           <div>
-            <h1 className="text-xl font-bold">Order #{order.id.slice(-8).toUpperCase()}</h1>
+            <h1 className="text-xl font-bold">Order #{(order as { userOrderNumber?: number }).userOrderNumber ?? order.id}</h1>
             <p className="text-sm text-muted-foreground">{formatDateTime(order.createdAt)}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
