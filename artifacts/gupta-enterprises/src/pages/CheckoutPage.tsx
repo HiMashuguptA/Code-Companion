@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { MapPin, CreditCard, Truck, Store, CheckCircle, AlertTriangle, Coins } from "lucide-react";
+import { MapPin, CreditCard, Truck, Store, CheckCircle, AlertTriangle, Coins, BookMarked } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -36,9 +36,20 @@ function MapClickHandler({ onSelect }: { onSelect: (lat: number, lng: number) =>
   return null;
 }
 
+type SavedAddress = {
+  id: string;
+  label?: string;
+  street: string;
+  city: string;
+  state: string;
+  pincode: string;
+  lat?: number | null;
+  lng?: number | null;
+};
+
 export function CheckoutPage() {
   const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, dbUser } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: cart } = useGetCart({
@@ -55,7 +66,7 @@ export function CheckoutPage() {
 
   const [deliveryType, setDeliveryType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
   const [address, setAddress] = useState({ street: "", city: "Kohima", state: "Nagaland", pincode: "797001", lat: 0, lng: 0 });
-  const [contactDetails, setContactDetails] = useState({ name: "", phone: "" });
+  const [contactDetails, setContactDetails] = useState({ name: dbUser?.name ?? "", phone: dbUser?.phone ?? "" });
   const [mapPos, setMapPos] = useState<[number, number]>([SHOP_CONFIG.lat, SHOP_CONFIG.lng]);
   const [markerSet, setMarkerSet] = useState(false);
   const [deliverable, setDeliverable] = useState<boolean | null>(null);
@@ -63,9 +74,12 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [ordered, setOrdered] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [saveAddressAfterOrder, setSaveAddressAfterOrder] = useState(false);
 
   const [useCoins, setUseCoins] = useState(false);
   const [coinsToRedeem, setCoinsToRedeem] = useState(0);
+
+  const savedAddresses = (dbUser?.addresses ?? []) as SavedAddress[];
 
   const subtotal = cart?.subtotal ?? 0;
   const couponDiscount = cart?.couponDiscount ?? 0;
@@ -81,6 +95,17 @@ export function CheckoutPage() {
   const effectiveCoins = useCoins ? Math.min(coinsToRedeem || 0, maxRedeemable) : 0;
   const grandTotal = Math.max(0, baseTotal + deliveryFee - effectiveCoins);
   const estimatedReward = Math.floor((baseTotal + deliveryFee - effectiveCoins) * 0.02);
+
+  const applyAddress = async (addr: SavedAddress) => {
+    setAddress({ street: addr.street, city: addr.city, state: addr.state, pincode: addr.pincode, lat: addr.lat ?? 0, lng: addr.lng ?? 0 });
+    if (addr.lat && addr.lng) {
+      setMapPos([addr.lat, addr.lng]);
+      setMarkerSet(true);
+      const dist = haversineDistanceKm(SHOP_CONFIG.lat, SHOP_CONFIG.lng, addr.lat, addr.lng);
+      setDistanceKm(Math.round(dist * 10) / 10);
+      setDeliverable(dist <= SHOP_CONFIG.deliveryRadiusKm);
+    }
+  };
 
   const handleMapClick = async (lat: number, lng: number) => {
     setMapPos([lat, lng]);
@@ -108,6 +133,18 @@ export function CheckoutPage() {
       pos => handleMapClick(pos.coords.latitude, pos.coords.longitude),
       () => toast.error("Location access denied. Please click on the map to select your location."),
     );
+  };
+
+  const saveAddressToProfile = async () => {
+    if (!address.street || !address.city || !address.pincode) return;
+    try {
+      const token = await currentUser?.getIdToken();
+      await fetch("/api/users/me/save-address", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ street: address.street, city: address.city, state: address.state, pincode: address.pincode, lat: address.lat || undefined, lng: address.lng || undefined }),
+      });
+    } catch (_) { /* silent */ }
   };
 
   const handlePlaceOrder = async () => {
@@ -145,10 +182,13 @@ export function CheckoutPage() {
     };
 
     createOrder.mutate({ data: orderData }, {
-      onSuccess: order => {
+      onSuccess: async order => {
         queryClient.invalidateQueries({ queryKey: getGetCartQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyReferralInfoQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListMyCoinTransactionsQueryKey() });
+        if (deliveryType === "DELIVERY" && saveAddressAfterOrder) {
+          await saveAddressToProfile();
+        }
         setOrdered(true);
         setOrderId(order.id);
       },
@@ -242,6 +282,27 @@ export function CheckoutPage() {
                 </Button>
               </div>
 
+              {/* Saved addresses */}
+              {savedAddresses.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+                    <BookMarked className="w-3.5 h-3.5" /> Saved Addresses
+                  </p>
+                  <div className="grid gap-2">
+                    {savedAddresses.map(addr => (
+                      <button key={addr.id} onClick={() => applyAddress(addr)}
+                        className={`text-left text-sm w-full px-3 py-2 rounded-lg border-2 transition-all hover:border-primary/50 ${address.street === addr.street && address.pincode === addr.pincode ? "border-primary bg-primary/5" : "border-border"}`}>
+                        <span className="font-medium text-xs text-primary">{addr.label ?? "Home"}</span>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          {[addr.street, addr.city, addr.pincode].filter(Boolean).join(", ")}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">Or enter a new address below:</p>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground mb-3">
                 📍 We deliver within <strong>{SHOP_CONFIG.deliveryRadiusKm}km</strong> of our shop in Kohima. Click on the map to select your location.
               </p>
@@ -287,6 +348,12 @@ export function CheckoutPage() {
                     placeholder="797001" value={address.pincode}
                     onChange={e => setAddress(a => ({ ...a, pincode: e.target.value }))} />
                 </div>
+              </div>
+
+              {/* Save address toggle */}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                <Switch id="save-addr" checked={saveAddressAfterOrder} onCheckedChange={setSaveAddressAfterOrder} />
+                <Label htmlFor="save-addr" className="text-sm cursor-pointer">Save this address for future orders</Label>
               </div>
             </section>
           )}

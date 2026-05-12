@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useLocationSearch } from "@/hooks/useLocationSearch";
-import { ArrowRight, MapPin, Phone, Mail, Clock, SlidersHorizontal, X, Tag, Sparkles, Flame, Star, Heart, TrendingUp } from "lucide-react";
+import { ArrowRight, MapPin, Phone, Mail, Clock, SlidersHorizontal, X, Tag, Sparkles, Flame, Star, Heart, TrendingUp, Package, ChevronRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import {
-  useListProducts, useListCategories, useListProductTags, useListFavorites,
-  getListProductsQueryKey, getListCategoriesQueryKey, getListProductTagsQueryKey, getListFavoritesQueryKey,
+  useListProducts, useListCategories, useListProductTags, useListFavorites, useListOrders,
+  getListProductsQueryKey, getListCategoriesQueryKey, getListProductTagsQueryKey, getListFavoritesQueryKey, getListOrdersQueryKey,
 } from "@workspace/api-client-react";
 import type { Product, Category } from "@workspace/api-client-react";
 import { ProductCard } from "@/components/ProductCard";
@@ -31,128 +31,39 @@ const shopIcon = L.divIcon({
 
 type SortKey = "newest" | "price_asc" | "price_desc" | "popularity" | "discount";
 
-export function HomePage() {
-  const locationSearch = useLocationSearch();
-  const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+// ─── FilterContent must be defined OUTSIDE HomePage so React doesn't remount it on every render ───
+interface FilterContentProps {
+  categoriesArray: Category[];
+  category: string;
+  search: string;
+  navigate: (path: string) => void;
+  setCategory: (c: string) => void;
+  setPage: (p: number) => void;
+  setFilterOpen: (o: boolean) => void;
+  tagsArray: Array<{ tag: string; count: number }>;
+  selectedTags: string[];
+  toggleTag: (t: string) => void;
+  minPrice: string;
+  setMinPrice: (p: string) => void;
+  maxPrice: string;
+  setMaxPrice: (p: string) => void;
+  minDiscount: string;
+  setMinDiscount: (d: string) => void;
+  inStock: boolean;
+  setInStock: (s: boolean) => void;
+  hasFilters: boolean;
+  clearFilters: () => void;
+}
 
-  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("search") ?? "");
-  const [category, setCategory] = useState(() => new URLSearchParams(window.location.search).get("category") ?? "");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [inStock, setInStock] = useState(false);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortKey>("newest");
-  const [page, setPage] = useState(1);
-  const [filterOpen, setFilterOpen] = useState(false);
-
-  useEffect(() => {
-    const sp = new URLSearchParams(locationSearch);
-    setSearch(sp.get("search") ?? "");
-    setCategory(sp.get("category") ?? "");
-    setPage(1);
-  }, [locationSearch]);
-
-  const baseQuery = {
-    search: search || undefined,
-    category: category || undefined,
-    minPrice: minPrice ? parseFloat(minPrice) : undefined,
-    maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-    inStock: inStock || undefined,
-    tags: selectedTags.length ? selectedTags.join(",") : undefined,
-    sort,
-    page,
-    limit: 24,
-  };
-
-  const { data: gridData, isLoading: gridLoading } = useListProducts(baseQuery, {
-    query: {
-      queryKey: getListProductsQueryKey(baseQuery),
-      staleTime: 1000 * 60 * 2,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-    },
-  });
-
-  const { data: categories } = useListCategories({
-    query: { queryKey: getListCategoriesQueryKey(), staleTime: 1000 * 60 * 5 },
-  });
-
-  const { data: tagsData } = useListProductTags({
-    query: { queryKey: getListProductTagsQueryKey(), staleTime: 1000 * 60 * 5 },
-  });
-
-  // Rail data — broad fetch
-  const { data: railData } = useListProducts({ limit: 60 }, {
-    query: {
-      queryKey: getListProductsQueryKey({ limit: 60 }),
-      staleTime: 1000 * 60 * 5,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-    },
-  });
-
-  // Wishlist
-  const { data: favoritesData } = useListFavorites({
-    query: {
-      queryKey: getListFavoritesQueryKey(),
-      enabled: !!currentUser,
-      staleTime: 1000 * 60 * 2,
-    },
-  });
-
-  const categoriesArray = Array.isArray(categories) ? categories : [];
-  const tagsArray = Array.isArray(tagsData) ? tagsData : [];
-  const railProducts = (railData?.products ?? []) as Product[];
-  const wishlistProducts = (favoritesData as { product?: Product }[] ?? []).map(f => f.product).filter(Boolean) as Product[];
-
-  const featuredProducts = useMemo(
-    () => railProducts.filter(p => p.isFeatured).slice(0, 8),
-    [railProducts],
-  );
-  const bestDiscounts = useMemo(
-    () => [...railProducts]
-      .filter(p => Number(p.discount ?? 0) > 0)
-      .sort((a, b) => Number(b.discount ?? 0) - Number(a.discount ?? 0))
-      .slice(0, 8),
-    [railProducts],
-  );
-  const topSelling = useMemo(
-    () => [...railProducts]
-      .sort((a, b) => Number(b.salesCount ?? 0) - Number(a.salesCount ?? 0))
-      .filter(p => Number(p.salesCount ?? 0) > 0)
-      .slice(0, 8),
-    [railProducts],
-  );
-  const suggestedProducts = useMemo(
-    () => [...railProducts]
-      .sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0))
-      .filter(p => !p.isFeatured)
-      .slice(0, 8),
-    [railProducts],
-  );
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-    setPage(1);
-  };
-
-  const clearFilters = () => {
-    setSearch("");
-    setCategory("");
-    setMinPrice("");
-    setMaxPrice("");
-    setInStock(false);
-    setSelectedTags([]);
-    setSort("newest");
-    setPage(1);
-    navigate("/");
-  };
-
-  const hasFilters = !!(search || category || minPrice || maxPrice || inStock || selectedTags.length);
-  const activeFilterCount = [search, category, minPrice, maxPrice, inStock ? "1" : "", ...selectedTags].filter(Boolean).length;
-
-  const FilterContent = () => (
+function FilterContent({
+  categoriesArray, category, search, navigate, setCategory, setPage, setFilterOpen,
+  tagsArray, selectedTags, toggleTag,
+  minPrice, setMinPrice, maxPrice, setMaxPrice,
+  minDiscount, setMinDiscount,
+  inStock, setInStock,
+  hasFilters, clearFilters,
+}: FilterContentProps) {
+  return (
     <div className="space-y-6">
       <div>
         <Label className="text-sm font-semibold mb-2 block">Category</Label>
@@ -184,7 +95,7 @@ export function HomePage() {
 
       {tagsArray.length > 0 && (
         <div>
-          <Label className="text-sm font-semibold mb-2 block flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Tags / Features</Label>
+          <Label className="text-sm font-semibold mb-2 flex items-center gap-1.5 block"><Tag className="w-3.5 h-3.5" /> Tags / Features</Label>
           <div className="flex flex-wrap gap-1.5">
             {tagsArray.slice(0, 24).map((t: { tag: string; count: number }) => {
               const active = selectedTags.includes(t.tag);
@@ -211,6 +122,17 @@ export function HomePage() {
         </div>
       </div>
 
+      <div>
+        <Label className="text-sm font-semibold mb-2 block">Minimum Discount</Label>
+        <div className="flex items-center gap-2">
+          <input type="number" min="0" max="100" placeholder="e.g. 20"
+            className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-[#2874F0]/40"
+            value={minDiscount} onChange={e => { setMinDiscount(e.target.value); setPage(1); }} />
+          <span className="text-sm text-muted-foreground shrink-0">% off</span>
+        </div>
+        {minDiscount && <p className="text-xs text-[#2874F0] mt-1">Showing ≥{minDiscount}% off products</p>}
+      </div>
+
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" className="w-4 h-4 rounded accent-[#2874F0]"
           checked={inStock} onChange={e => { setInStock(e.target.checked); setPage(1); }} />
@@ -229,6 +151,176 @@ export function HomePage() {
       </div>
     </div>
   );
+}
+
+export function HomePage() {
+  const locationSearch = useLocationSearch();
+  const [, navigate] = useLocation();
+  const { currentUser } = useAuth();
+
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("search") ?? "");
+  const [category, setCategory] = useState(() => new URLSearchParams(window.location.search).get("category") ?? "");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [minDiscount, setMinDiscount] = useState("");
+  const [inStock, setInStock] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [myReviews, setMyReviews] = useState<Array<{ productId: string }>>([]);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(locationSearch);
+    setSearch(sp.get("search") ?? "");
+    setCategory(sp.get("category") ?? "");
+    setPage(1);
+  }, [locationSearch]);
+
+  // Fetch user's own reviews for the "Your Reviewed" rail
+  useEffect(() => {
+    if (!currentUser) return;
+    currentUser.getIdToken().then(token => {
+      fetch("/api/reviews/my", { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMyReviews(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    });
+  }, [currentUser]);
+
+  const baseQuery = {
+    search: search || undefined,
+    category: category || undefined,
+    minPrice: minPrice ? parseFloat(minPrice) : undefined,
+    maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+    inStock: inStock || undefined,
+    tags: selectedTags.length ? selectedTags.join(",") : undefined,
+    minDiscount: minDiscount ? parseFloat(minDiscount) : undefined,
+    sort,
+    page,
+    limit: 24,
+  };
+
+  const { data: gridData, isLoading: gridLoading } = useListProducts(baseQuery, {
+    query: {
+      queryKey: getListProductsQueryKey(baseQuery),
+      staleTime: 1000 * 60 * 2,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  const { data: categories } = useListCategories({
+    query: { queryKey: getListCategoriesQueryKey(), staleTime: 1000 * 60 * 5 },
+  });
+
+  const { data: tagsData } = useListProductTags({
+    query: { queryKey: getListProductTagsQueryKey(), staleTime: 1000 * 60 * 5 },
+  });
+
+  const { data: railData } = useListProducts({ limit: 80 }, {
+    query: {
+      queryKey: getListProductsQueryKey({ limit: 80 }),
+      staleTime: 1000 * 60 * 5,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  const { data: favoritesData } = useListFavorites({
+    query: {
+      queryKey: getListFavoritesQueryKey(),
+      enabled: !!currentUser,
+      staleTime: 1000 * 60 * 2,
+    },
+  });
+
+  const { data: ordersData } = useListOrders({ limit: 10, page: 1 }, {
+    query: {
+      queryKey: getListOrdersQueryKey({ limit: 10, page: 1 }),
+      enabled: !!currentUser,
+      staleTime: 1000 * 60 * 5,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  const categoriesArray = Array.isArray(categories) ? categories : [];
+  const tagsArray = Array.isArray(tagsData) ? tagsData : [];
+  const railProducts = (railData?.products ?? []) as Product[];
+  const wishlistProducts = (favoritesData as { product?: Product }[] ?? []).map(f => f.product).filter(Boolean) as Product[];
+
+  const featuredProducts = useMemo(
+    () => railProducts.filter(p => p.isFeatured).slice(0, 10),
+    [railProducts],
+  );
+  const bestDiscounts = useMemo(
+    () => [...railProducts]
+      .filter(p => Number(p.discount ?? 0) > 0)
+      .sort((a, b) => Number(b.discount ?? 0) - Number(a.discount ?? 0))
+      .slice(0, 10),
+    [railProducts],
+  );
+  const topSelling = useMemo(
+    () => [...railProducts]
+      .sort((a, b) => Number(b.salesCount ?? 0) - Number(a.salesCount ?? 0))
+      .filter(p => Number(p.salesCount ?? 0) > 0)
+      .slice(0, 10),
+    [railProducts],
+  );
+  const suggestedProducts = useMemo(
+    () => [...railProducts]
+      .sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0))
+      .filter(p => !p.isFeatured)
+      .slice(0, 10),
+    [railProducts],
+  );
+
+  // Last Ordered rail — deduplicated products from recent orders
+  const lastOrderedProducts = useMemo(() => {
+    const orders = (ordersData?.orders ?? []) as Array<{ items: Array<{ productId: string }> }>;
+    const seenIds = new Set<string>();
+    const productIds: string[] = [];
+    for (const order of orders) {
+      for (const item of (order.items ?? [])) {
+        if (!seenIds.has(item.productId)) {
+          seenIds.add(item.productId);
+          productIds.push(item.productId);
+        }
+      }
+    }
+    return productIds
+      .map(pid => railProducts.find(p => p.id === pid))
+      .filter(Boolean)
+      .slice(0, 10) as Product[];
+  }, [ordersData, railProducts]);
+
+  // Your Reviewed rail — products that user has reviewed
+  const reviewedProducts = useMemo(() => {
+    const reviewedIds = new Set(myReviews.map(r => r.productId));
+    return railProducts.filter(p => reviewedIds.has(p.id)).slice(0, 10);
+  }, [myReviews, railProducts]);
+
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    setPage(1);
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setCategory("");
+    setMinPrice("");
+    setMaxPrice("");
+    setMinDiscount("");
+    setInStock(false);
+    setSelectedTags([]);
+    setSort("newest");
+    setPage(1);
+    navigate("/");
+  }, [navigate]);
+
+  const hasFilters = !!(search || category || minPrice || maxPrice || minDiscount || inStock || selectedTags.length);
+  const activeFilterCount = [search, category, minPrice, maxPrice, minDiscount, inStock ? "1" : "", ...selectedTags].filter(Boolean).length;
 
   return (
     <div className="bg-[#f1f3f6] dark:bg-background min-h-screen">
@@ -237,67 +329,57 @@ export function HomePage() {
         <CategoryNavBar />
       </div>
 
-      {/* Top carousel banner — hidden when searching/filtering */}
+      {/* Top carousel banner */}
       {!hasFilters && <BannerSection position="TOP" />}
 
-      {/* Product Rails — only when not actively searching */}
+      {/* Product Rails — only when not searching/filtering */}
       {!hasFilters && (
         <div className="container mx-auto px-2 sm:px-4 space-y-3 mt-3">
           {featuredProducts.length > 0 && (
-            <Rail title="Featured Products" icon={<Sparkles className="w-4 h-4 text-[#2874F0]" />} products={featuredProducts} />
+            <HorizontalRail title="Featured Products" icon={<Sparkles className="w-4 h-4 text-[#2874F0]" />} products={featuredProducts} viewAllHref="/?featured=true" />
           )}
           {bestDiscounts.length > 0 && (
-            <Rail
+            <HorizontalRail
               title="Top Discounts"
               icon={<Flame className="w-4 h-4 text-red-500" />}
               suffix={<Badge className="bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/10">Up to {Math.max(...bestDiscounts.map(p => Number(p.discount ?? 0)))}% OFF</Badge>}
               products={bestDiscounts}
+              viewAllHref="/?sort=discount"
             />
           )}
           {topSelling.length > 0 && (
-            <Rail title="Top Selling" icon={<Star className="w-4 h-4 text-amber-500" />} products={topSelling} showRank />
+            <HorizontalRail title="Top Selling" icon={<Star className="w-4 h-4 text-amber-500" />} products={topSelling} showRank viewAllHref="/?sort=popularity" />
           )}
-
-          {/* Wishlist rail */}
           {wishlistProducts.length > 0 && (
-            <Rail
-              title="Your Wishlist"
-              icon={<Heart className="w-4 h-4 text-rose-500 fill-rose-500" />}
-              products={wishlistProducts}
-              viewAllHref="/wishlist"
-            />
+            <HorizontalRail title="Your Wishlist" icon={<Heart className="w-4 h-4 text-rose-500 fill-rose-500" />} products={wishlistProducts} viewAllHref="/wishlist" />
           )}
-
-          {/* Suggested / Highly Rated */}
           {suggestedProducts.length > 0 && (
-            <Rail
-              title="Suggested For You"
-              icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
-              products={suggestedProducts}
-            />
+            <HorizontalRail title="Suggested For You" icon={<TrendingUp className="w-4 h-4 text-emerald-500" />} products={suggestedProducts} viewAllHref="/?sort=newest" />
+          )}
+          {currentUser && lastOrderedProducts.length > 0 && (
+            <HorizontalRail title="Order Again" icon={<Package className="w-4 h-4 text-violet-500" />} products={lastOrderedProducts} viewAllHref="/orders" />
+          )}
+          {currentUser && reviewedProducts.length > 0 && (
+            <HorizontalRail title="Your Reviewed Products" icon={<RotateCcw className="w-4 h-4 text-blue-500" />} products={reviewedProducts} viewAllHref="/orders" />
           )}
         </div>
       )}
 
-      {/* Middle banner — hidden when searching/filtering */}
+      {/* Middle banner */}
       {!hasFilters && <BannerSection position="MIDDLE" />}
 
-      {/* All Products Section — no persistent sidebar */}
+      {/* All Products Section */}
       <section className="container mx-auto px-2 sm:px-4 py-3">
         <div className="bg-white dark:bg-card rounded-xl shadow-sm p-4">
-          {/* Section header with filter button */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <h2 className="font-bold text-base flex items-center gap-2">
               {search ? <>🔍 Results for <span className="text-[#2874F0]">"{search}"</span></> :
                 category ? categoriesArray.find(c => c.slug === category)?.name ?? "Category" :
                   "All Products"}
-              <span className="text-xs text-muted-foreground font-normal">
-                ({gridData?.total ?? 0})
-              </span>
+              <span className="text-xs text-muted-foreground font-normal">({gridData?.total ?? 0})</span>
             </h2>
 
             <div className="ml-auto flex items-center gap-2">
-              {/* Sort pills */}
               <div className="hidden sm:flex items-center gap-1 text-xs">
                 {([
                   { v: "popularity", l: "Popular" },
@@ -313,7 +395,6 @@ export function HomePage() {
                 ))}
               </div>
 
-              {/* Filter sheet button */}
               <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-1.5 relative">
@@ -328,11 +409,32 @@ export function HomePage() {
                 </SheetTrigger>
                 <SheetContent side="right" className="w-[320px] overflow-y-auto">
                   <SheetHeader>
-                    <SheetTitle className="flex items-center gap-2">
-                      <SlidersHorizontal className="w-4 h-4" /> Filters
-                    </SheetTitle>
+                    <SheetTitle className="flex items-center gap-2"><SlidersHorizontal className="w-4 h-4" /> Filters</SheetTitle>
                   </SheetHeader>
-                  <div className="mt-5"><FilterContent /></div>
+                  <div className="mt-5">
+                    <FilterContent
+                      categoriesArray={categoriesArray}
+                      category={category}
+                      search={search}
+                      navigate={navigate}
+                      setCategory={setCategory}
+                      setPage={setPage}
+                      setFilterOpen={setFilterOpen}
+                      tagsArray={tagsArray}
+                      selectedTags={selectedTags}
+                      toggleTag={toggleTag}
+                      minPrice={minPrice}
+                      setMinPrice={setMinPrice}
+                      maxPrice={maxPrice}
+                      setMaxPrice={setMaxPrice}
+                      minDiscount={minDiscount}
+                      setMinDiscount={setMinDiscount}
+                      inStock={inStock}
+                      setInStock={setInStock}
+                      hasFilters={hasFilters}
+                      clearFilters={clearFilters}
+                    />
+                  </div>
                 </SheetContent>
               </Sheet>
             </div>
@@ -372,10 +474,9 @@ export function HomePage() {
               {selectedTags.map(t => <Chip key={t} label={t} onClear={() => toggleTag(t)} />)}
               {minPrice && <Chip label={`Min ₹${minPrice}`} onClear={() => setMinPrice("")} />}
               {maxPrice && <Chip label={`Max ₹${maxPrice}`} onClear={() => setMaxPrice("")} />}
+              {minDiscount && <Chip label={`≥${minDiscount}% off`} onClear={() => setMinDiscount("")} />}
               {inStock && <Chip label="In stock" onClear={() => setInStock(false)} />}
-              <button onClick={clearFilters} className="text-xs text-[#2874F0] hover:underline flex items-center gap-0.5 ml-1">
-                Clear all
-              </button>
+              <button onClick={clearFilters} className="text-xs text-[#2874F0] hover:underline flex items-center gap-0.5 ml-1">Clear all</button>
             </motion.div>
           )}
 
@@ -446,7 +547,7 @@ export function HomePage() {
       {/* Recently Viewed */}
       <RecentlyViewedRail />
 
-      {/* Bottom banners — hidden when searching/filtering */}
+      {/* Bottom banners */}
       {!hasFilters && <BannerSection position="BOTTOM" />}
 
       {/* About + Map */}
@@ -459,27 +560,19 @@ export function HomePage() {
             </p>
             <div className="space-y-2.5 text-sm">
               <a href={`tel:${SHOP_CONFIG.phone}`} className="flex items-center gap-2.5 hover:text-[#2874F0] transition-colors">
-                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0">
-                  <Phone className="w-3.5 h-3.5 text-[#2874F0]" />
-                </div>
+                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0"><Phone className="w-3.5 h-3.5 text-[#2874F0]" /></div>
                 +91 {SHOP_CONFIG.phone}
               </a>
               <a href={`mailto:${SHOP_CONFIG.email}`} className="flex items-center gap-2.5 hover:text-[#2874F0] transition-colors">
-                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0">
-                  <Mail className="w-3.5 h-3.5 text-[#2874F0]" />
-                </div>
+                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0"><Mail className="w-3.5 h-3.5 text-[#2874F0]" /></div>
                 {SHOP_CONFIG.email}
               </a>
               <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <MapPin className="w-3.5 h-3.5 text-[#2874F0]" />
-                </div>
+                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0 mt-0.5"><MapPin className="w-3.5 h-3.5 text-[#2874F0]" /></div>
                 <span className="text-muted-foreground">{SHOP_CONFIG.address}</span>
               </div>
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0">
-                  <Clock className="w-3.5 h-3.5 text-[#2874F0]" />
-                </div>
+                <div className="w-7 h-7 rounded-full bg-[#2874F0]/10 flex items-center justify-center shrink-0"><Clock className="w-3.5 h-3.5 text-[#2874F0]" /></div>
                 <span className="text-muted-foreground">{SHOP_CONFIG.openHours}</span>
               </div>
             </div>
@@ -522,7 +615,8 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   );
 }
 
-function Rail({
+// Single horizontal scrollable rail — 1 row of product cards
+function HorizontalRail({
   title, icon, products, suffix, showRank = false, viewAllHref,
 }: {
   title: string;
@@ -532,6 +626,8 @@ function Rail({
   showRank?: boolean;
   viewAllHref?: string;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -540,27 +636,31 @@ function Rail({
       transition={{ duration: 0.3 }}
       className="bg-white dark:bg-card rounded-xl shadow-sm p-4"
     >
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-3">
         {icon}
         <h2 className="text-base font-bold">{title}</h2>
         {suffix}
         {viewAllHref && (
-          <Link href={viewAllHref} className="ml-auto text-xs text-[#2874F0] hover:underline flex items-center gap-0.5">
-            View all <ArrowRight className="w-3 h-3" />
+          <Link href={viewAllHref} className="ml-auto text-xs text-[#2874F0] hover:underline flex items-center gap-0.5 shrink-0">
+            View All <ChevronRight className="w-3 h-3" />
           </Link>
         )}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-        {products.map((p, idx) => (
-          <div key={p.id} className="relative">
-            {showRank && idx < 3 && (
-              <div className={`absolute -top-2 -left-2 z-10 w-6 h-6 rounded-full border-2 border-white shadow text-[10px] font-bold flex items-center justify-center ${
-                idx === 0 ? "bg-yellow-400 text-yellow-900" : idx === 1 ? "bg-gray-300 text-gray-700" : "bg-amber-600 text-white"
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto pb-1 scrollbar-none scroll-smooth"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {products.map((p, i) => (
+          <div key={p.id} className="shrink-0 w-[160px] sm:w-[180px] relative">
+            {showRank && i < 3 && (
+              <div className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shadow ${
+                i === 0 ? "bg-yellow-500" : i === 1 ? "bg-gray-400" : "bg-amber-600"
               }`}>
-                {idx + 1}
+                {i + 1}
               </div>
             )}
-            <ProductCard product={p as never} />
+            <ProductCard product={p as never} index={i} />
           </div>
         ))}
       </div>

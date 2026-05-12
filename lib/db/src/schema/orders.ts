@@ -7,7 +7,11 @@ export const ordersTable = pgTable("orders", {
   userId: integer("user_id").notNull(),
   items: jsonb("items").notNull().default("[]"),
   status: text("status", {
-    enum: ["PENDING", "CONFIRMED", "PROCESSING", "PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "PICKUP_READY", "PICKED_UP"]
+    enum: [
+      "PENDING", "CONFIRMED", "PROCESSING", "PACKED", "OUT_FOR_DELIVERY",
+      "DELIVERED", "CANCELLED", "PICKUP_READY", "PICKED_UP",
+      "RETURN_PENDING", "RETURN_IN_TRANSIT", "RETURNED", "REFUND_INITIATED",
+    ]
   }).notNull().default("PENDING"),
   deliveryType: text("delivery_type", { enum: ["DELIVERY", "PICKUP"] }).notNull().default("DELIVERY"),
   deliveryAddress: jsonb("delivery_address"),
@@ -24,6 +28,7 @@ export const ordersTable = pgTable("orders", {
   paymentStatus: text("payment_status", { enum: ["PENDING", "PAID", "FAILED", "REFUNDED"] }).notNull().default("PENDING"),
   paymentMethod: text("payment_method"),
   notes: text("notes"),
+  returnImages: jsonb("return_images"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

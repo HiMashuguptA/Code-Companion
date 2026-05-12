@@ -42,6 +42,10 @@ export function getOrderStatusColor(status: string): string {
     CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
     PICKUP_READY: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
     PICKED_UP: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+    RETURN_PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    RETURN_IN_TRANSIT: "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
+    RETURNED: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
+    REFUND_INITIATED: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
   };
   return colors[status] ?? "bg-gray-100 text-gray-800";
 }
@@ -57,6 +61,10 @@ export function getOrderStatusLabel(status: string): string {
     CANCELLED: "Cancelled",
     PICKUP_READY: "Ready for Pickup",
     PICKED_UP: "Picked Up",
+    RETURN_PENDING: "Return Pending",
+    RETURN_IN_TRANSIT: "Return In Transit",
+    RETURNED: "Returned",
+    REFUND_INITIATED: "Refund Initiated",
   };
   return labels[status] ?? status;
 }

@@ -16,8 +16,10 @@ import { authenticateUser, requireAdmin, requireDeliveryAgent, type AuthRequest 
 
 const router = Router();
 
-const COIN_VALUE = 1; // 1 coin = ₹1
-const REWARD_PCT = 0.02; // 2% of paid total back as coins
+const COIN_VALUE = 1;
+const REWARD_PCT = 0.02;
+
+const RETURN_STATUSES = ["RETURN_PENDING", "RETURN_IN_TRANSIT", "RETURNED", "REFUND_INITIATED"] as const;
 
 router.get("/", authenticateUser, async (req: AuthRequest, res) => {
   const { status, page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -34,7 +36,6 @@ router.get("/", authenticateUser, async (req: AuthRequest, res) => {
     const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(ordersTable).where(whereClause);
     const total = Number(countResult?.count ?? 0);
 
-    // Build per-user sequential order number map for non-admin users
     const userOrderNumberMap = new Map<number, number>();
     if (req.userRole !== "ADMIN" && req.userId) {
       const allUserOrders = await db
@@ -155,14 +156,12 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
         orderId: order!.id,
       });
     }
-    // Increment coupon usageCount if a coupon was used
+
     if (couponCode) {
       await db.update(couponsTable)
         .set({ usageCount: sql`${couponsTable.usageCount} + 1` })
         .where(eq(couponsTable.code, couponCode));
     }
-
-    // coinsEarned are recorded but NOT credited until order is DELIVERED
 
     const trackingPayload: typeof trackingTable.$inferInsert = {
       orderId: order!.id,
@@ -182,7 +181,6 @@ router.post("/", authenticateUser, async (req: AuthRequest, res) => {
       orderId: order!.id,
     });
 
-    // Notify all admins about the new order
     const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
     for (const admin of admins) {
       await db.insert(notificationsTable).values({
@@ -227,7 +225,6 @@ router.get("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // Compute user's sequential order number
     let userOrderNumber: number | undefined;
     if (req.userRole !== "ADMIN") {
       const [{ count }] = await db
@@ -278,7 +275,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       await db.update(trackingTable).set({ history }).where(eq(trackingTable.orderId, id));
     }
 
-    // Notify the customer
     await db.insert(notificationsTable).values({
       userId: existing.userId,
       title: "Order Update",
@@ -287,7 +283,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       orderId: id,
     });
 
-    // Notify all admin users
     const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
     for (const admin of admins) {
       if (admin.id !== existing.userId) {
@@ -301,8 +296,9 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       }
     }
 
-    // When order is CANCELLED: refund redeemed coins + restore product stock
-    if (parsed.data.status === "CANCELLED" && existing.status !== "CANCELLED") {
+    // Only refund coins/stock for true cancellations (not return-flow statuses)
+    const isReturnStatus = RETURN_STATUSES.includes(existing.status as typeof RETURN_STATUSES[number]);
+    if (parsed.data.status === "CANCELLED" && existing.status !== "CANCELLED" && !isReturnStatus) {
       const coinsToRefund = existing.coinsRedeemed ?? 0;
       if (coinsToRefund > 0) {
         await db.update(usersTable)
@@ -324,7 +320,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
         });
       }
 
-      // Restore product stock
       const cancelledItems = existing.items as Array<{ productId: string; quantity: number }>;
       for (const item of cancelledItems) {
         const pid = parseInt(item.productId);
@@ -339,7 +334,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
       }
     }
 
-    // When order is DELIVERED: credit coins earned + check referral bonus
     if (parsed.data.status === "DELIVERED" && existing.status !== "DELIVERED") {
       const coinsEarned = existing.coinsEarned ?? 0;
       if (coinsEarned > 0) {
@@ -362,7 +356,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
         });
       }
 
-      // Check if this is the user's first completed order — award referrer bonus
       const [orderUser] = await db.select().from(usersTable).where(eq(usersTable.id, existing.userId));
       if (orderUser?.referredBy) {
         const previousDeliveries = await db.select({ count: sql<number>`count(*)` })
@@ -374,7 +367,6 @@ router.put("/:orderId", authenticateUser, async (req: AuthRequest, res) => {
           ));
         const prevCount = Number(previousDeliveries[0]?.count ?? 0);
         if (prevCount === 0) {
-          // First ever delivered order — award referrer 100 coins
           const REFERRAL_BONUS = 100;
           await db.update(usersTable)
             .set({ superCoins: sql`${usersTable.superCoins} + ${REFERRAL_BONUS}` })
@@ -437,6 +429,8 @@ router.post("/:orderId/assign-agent", authenticateUser, requireAdmin, async (req
   }
 });
 
+// ─── Return Flow ──────────────────────────────────────────────────────────────
+
 router.post("/:orderId/return", authenticateUser, async (req: AuthRequest, res) => {
   const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
   const id = parseInt(orderId);
@@ -455,23 +449,23 @@ router.post("/:orderId/return", authenticateUser, async (req: AuthRequest, res) 
       return res.status(400).json({ error: "Only delivered orders can be returned" });
     }
 
-    // Update order status to mark return requested and store reason in notes
-    const returnNote = `RETURN_REQUESTED: ${reason.trim()}${images?.length ? ` | images: ${images.length}` : ""}`;
     const [order] = await db.update(ordersTable)
-      .set({ status: "CANCELLED", notes: returnNote })
+      .set({
+        status: "RETURN_PENDING",
+        notes: `RETURN_REQUESTED: ${reason.trim()}`,
+        returnImages: images?.length ? images : null,
+      })
       .where(eq(ordersTable.id, id))
       .returning();
 
-    // Notify customer
     await db.insert(notificationsTable).values({
       userId: existing.userId,
       title: "Return Request Received",
-      message: `Your return request for Order #${id} has been submitted. We'll contact you within 24 hours.`,
+      message: `Your return request for Order #${id} has been submitted. Our team will review it within 24 hours.`,
       type: "ORDER_UPDATE",
       orderId: id,
     });
 
-    // Notify all admins
     const admins = await db.select().from(usersTable).where(eq(usersTable.role, "ADMIN"));
     for (const admin of admins) {
       await db.insert(notificationsTable).values({
@@ -500,25 +494,28 @@ router.post("/:orderId/return-approve", authenticateUser, requireAdmin, async (r
     if (!existing) return res.status(404).json({ error: "Order not found" });
 
     const currentNotes = existing.notes ?? "";
-    if (!currentNotes.startsWith("RETURN_REQUESTED:")) {
+    // Support both new (RETURN_PENDING status) and legacy (CANCELLED + notes) returns
+    const isPendingReturn = existing.status === "RETURN_PENDING" && currentNotes.startsWith("RETURN_REQUESTED:");
+    const isLegacyReturn = existing.status === "CANCELLED" && currentNotes.startsWith("RETURN_REQUESTED:");
+    if (!isPendingReturn && !isLegacyReturn) {
       return res.status(400).json({ error: "This order does not have a pending return request" });
     }
 
     const newNotes = currentNotes.replace(/^RETURN_REQUESTED:/, "RETURN_APPROVED:");
     const [order] = await db.update(ordersTable)
-      .set({ notes: newNotes })
+      .set({ notes: newNotes, status: "RETURN_PENDING" })
       .where(eq(ordersTable.id, id))
       .returning();
 
     await db.insert(notificationsTable).values({
       userId: existing.userId,
       title: "Return Request Approved",
-      message: `Your return request for Order #${id} has been approved. Our team will contact you to arrange the pickup and refund.`,
+      message: `Your return request for Order #${id} has been approved. A delivery agent will be assigned to collect the item.`,
       type: "ORDER_UPDATE",
       orderId: id,
     });
 
-    return res.json({ message: "Return approved and customer notified", order: await enrichOrder(order!) });
+    return res.json({ message: "Return approved", order: await enrichOrder(order!) });
   } catch (err) {
     req.log.error({ err }, "Failed to approve return");
     return res.status(500).json({ error: "Internal server error" });
@@ -537,13 +534,14 @@ router.post("/:orderId/return-reject", authenticateUser, requireAdmin, async (re
     if (!existing) return res.status(404).json({ error: "Order not found" });
 
     const currentNotes = existing.notes ?? "";
-    if (!currentNotes.startsWith("RETURN_REQUESTED:")) {
-      return res.status(400).json({ error: "This order does not have a pending return request" });
+    if (!currentNotes.startsWith("RETURN_REQUESTED:") && !currentNotes.startsWith("RETURN_APPROVED:")) {
+      return res.status(400).json({ error: "This order does not have a return request to reject" });
     }
 
-    const newNotes = currentNotes.replace(/^RETURN_REQUESTED:/, "RETURN_REJECTED:");
+    const rejectedReason = currentNotes.replace(/^RETURN_REQUESTED:|^RETURN_APPROVED:/, "").trim();
+    const newNotes = `RETURN_REJECTED: ${rejectedReason}${rejectionMsg?.trim() ? ` | reason: ${rejectionMsg.trim()}` : ""}`;
     const [order] = await db.update(ordersTable)
-      .set({ notes: newNotes })
+      .set({ status: "DELIVERED", notes: newNotes })
       .where(eq(ordersTable.id, id))
       .returning();
 
@@ -559,9 +557,170 @@ router.post("/:orderId/return-reject", authenticateUser, requireAdmin, async (re
       orderId: id,
     });
 
-    return res.json({ message: "Return rejected and customer notified", order: await enrichOrder(order!) });
+    return res.json({ message: "Return rejected", order: await enrichOrder(order!) });
   } catch (err) {
     req.log.error({ err }, "Failed to reject return");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Assign agent for return pickup → RETURN_IN_TRANSIT
+router.post("/:orderId/return-assign-agent", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  const { agentId } = req.body as { agentId?: string };
+  if (!agentId) return res.status(400).json({ error: "agentId is required" });
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+    if (existing.status !== "RETURN_PENDING") {
+      return res.status(400).json({ error: "Order must be in RETURN_PENDING state" });
+    }
+
+    const agentIdNum = parseInt(agentId);
+    const [order] = await db.update(ordersTable)
+      .set({ status: "RETURN_IN_TRANSIT", deliveryAgentId: agentIdNum })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    // Notify the customer
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Return Pickup Arranged",
+      message: `A delivery agent has been assigned to collect your return for Order #${id}. You can track their location in real time.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    // Notify the agent
+    await db.insert(notificationsTable).values({
+      userId: agentIdNum,
+      title: "Return Pickup Assignment",
+      message: `You have been assigned to collect the return for Order #${id}. Pickup address is the customer's delivery address.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    return res.json({ message: "Agent assigned for return pickup", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to assign return agent");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Mark item as physically returned (agent picked up from customer) → RETURNED
+router.post("/:orderId/return-mark-returned", authenticateUser, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+
+    if (req.userRole !== "ADMIN" && existing.deliveryAgentId !== req.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (existing.status !== "RETURN_IN_TRANSIT") {
+      return res.status(400).json({ error: "Order must be in RETURN_IN_TRANSIT state" });
+    }
+
+    const [order] = await db.update(ordersTable)
+      .set({ status: "RETURNED" })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Return Received",
+      message: `Your returned item for Order #${id} has been collected. Refund will be initiated within 2-5 business days.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    return res.json({ message: "Order marked as returned", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to mark returned");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Admin initiates refund → REFUND_INITIATED + refund coins + restore stock
+router.post("/:orderId/return-initiate-refund", authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const id = parseInt(orderId);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
+
+  try {
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing) return res.status(404).json({ error: "Order not found" });
+    if (existing.status !== "RETURNED") {
+      return res.status(400).json({ error: "Order must be in RETURNED state to initiate refund" });
+    }
+
+    const [order] = await db.update(ordersTable)
+      .set({ status: "REFUND_INITIATED", paymentStatus: "REFUNDED" })
+      .where(eq(ordersTable.id, id))
+      .returning();
+
+    // Refund any redeemed coins back to user
+    const coinsToRefund = existing.coinsRedeemed ?? 0;
+    if (coinsToRefund > 0) {
+      await db.update(usersTable)
+        .set({ superCoins: sql`${usersTable.superCoins} + ${coinsToRefund}` })
+        .where(eq(usersTable.id, existing.userId));
+      await db.insert(coinTransactionsTable).values({
+        userId: existing.userId,
+        amount: coinsToRefund,
+        reason: "ORDER_REFUND",
+        description: `Super Coins refunded for returned Order #${id}`,
+        orderId: id,
+      });
+    }
+
+    // Reclaim any coins that were earned and credited (reversal)
+    const coinsEarned = existing.coinsEarned ?? 0;
+    if (coinsEarned > 0) {
+      await db.update(usersTable)
+        .set({ superCoins: sql`GREATEST(0, ${usersTable.superCoins} - ${coinsEarned})` })
+        .where(eq(usersTable.id, existing.userId));
+      await db.insert(coinTransactionsTable).values({
+        userId: existing.userId,
+        amount: -coinsEarned,
+        reason: "ORDER_REFUND",
+        description: `Super Coins reversed for returned Order #${id}`,
+        orderId: id,
+      });
+    }
+
+    // Restore product stock
+    const returnedItems = existing.items as Array<{ productId: string; quantity: number }>;
+    for (const item of returnedItems) {
+      const pid = parseInt(item.productId);
+      if (!isNaN(pid)) {
+        await db.update(productsTable)
+          .set({
+            stock: sql`${productsTable.stock} + ${item.quantity}`,
+            salesCount: sql`GREATEST(0, ${productsTable.salesCount} - ${item.quantity})`,
+          })
+          .where(eq(productsTable.id, pid));
+      }
+    }
+
+    await db.insert(notificationsTable).values({
+      userId: existing.userId,
+      title: "Refund Initiated",
+      message: `Your refund of ₹${parseFloat(String(existing.total)).toFixed(0)} for Order #${id} has been initiated. It will reflect in 2-5 business days.`,
+      type: "ORDER_UPDATE",
+      orderId: id,
+    });
+
+    return res.json({ message: "Refund initiated", order: await enrichOrder(order!) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to initiate refund");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -577,6 +736,10 @@ function getStatusMessage(status: string) {
     CANCELLED: "Order cancelled",
     PICKUP_READY: "Ready for pickup",
     PICKED_UP: "Order picked up",
+    RETURN_PENDING: "Return request pending review",
+    RETURN_IN_TRANSIT: "Return in transit — agent heading to collect",
+    RETURNED: "Item collected — refund processing",
+    REFUND_INITIATED: "Refund initiated",
   };
   return messages[status] ?? status;
 }
@@ -615,6 +778,7 @@ async function enrichOrder(order: typeof ordersTable.$inferSelect, userOrderNumb
     paymentStatus: order.paymentStatus,
     paymentMethod: order.paymentMethod,
     notes: order.notes,
+    returnImages: order.returnImages ?? null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };

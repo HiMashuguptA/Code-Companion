@@ -1,5 +1,5 @@
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, MapPin, Package, Phone, Truck, FileText, RotateCcw, User as UserIcon } from "lucide-react";
+import { ArrowLeft, MapPin, Package, Phone, Truck, FileText, RotateCcw, User as UserIcon, RefreshCw, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +27,7 @@ const markerIcon = L.icon({
 });
 
 const ORDER_STEPS = ["PENDING","CONFIRMED","PROCESSING","PACKED","OUT_FOR_DELIVERY","DELIVERED"] as const;
+const RETURN_STEPS = ["RETURN_PENDING","RETURN_IN_TRANSIT","RETURNED","REFUND_INITIATED"] as const;
 
 function OrderSkeleton() {
   return (
@@ -64,16 +65,17 @@ export function OrderDetailPage() {
       retryDelay: 500,
     }
   });
+
+  const isReturnInTransit = order?.status === "RETURN_IN_TRANSIT";
   const { data: tracking } = useGetOrderTracking(orderId, {
     query: {
       queryKey: getGetOrderTrackingQueryKey(orderId),
-      enabled: !!orderId && !!currentUser && order?.status === "OUT_FOR_DELIVERY",
+      enabled: !!orderId && !!currentUser && (order?.status === "OUT_FOR_DELIVERY" || isReturnInTransit),
       refetchInterval: 5000
     }
   });
   const updateOrder = useUpdateOrder();
 
-  // Show skeleton while auth is initialising (prevents "not found" flash on refresh)
   if (authLoading) return <OrderSkeleton />;
 
   if (!currentUser) {
@@ -97,18 +99,24 @@ export function OrderDetailPage() {
   );
 
   const currentStepIndex = ORDER_STEPS.indexOf(order.status as typeof ORDER_STEPS[number]);
+  const returnStepIndex = RETURN_STEPS.indexOf(order.status as typeof RETURN_STEPS[number]);
+  const isReturnFlow = returnStepIndex !== -1;
+
   const canCancel = ["PENDING", "CONFIRMED"].includes(order.status);
   const isAdmin = dbUser?.role === "ADMIN";
 
   const deliveredDate = order.status === "DELIVERED" && order.updatedAt ? new Date(order.updatedAt) : null;
   const returnEnd = deliveredDate ? new Date(deliveredDate.getTime() + 2 * 24 * 60 * 60 * 1000) : null;
   const canReturn = order.status === "DELIVERED" && returnEnd && new Date() < returnEnd;
-  const hasReturnRequest = !!(order.notes && (
-    (order.notes as string).startsWith("RETURN_REQUESTED:") ||
-    (order.notes as string).startsWith("RETURN_APPROVED:") ||
-    (order.notes as string).startsWith("RETURN_REJECTED:")
-  ));
+  const notes = (order.notes as string) ?? "";
+  const hasReturnRequest = isReturnFlow
+    || notes.startsWith("RETURN_REQUESTED:")
+    || notes.startsWith("RETURN_APPROVED:")
+    || notes.startsWith("RETURN_REJECTED:");
   const isReturnable = !hasReturnRequest && canReturn;
+
+  const stepColors = ["bg-amber-500","bg-blue-500","bg-indigo-500","bg-purple-500","bg-orange-500","bg-green-500"];
+  const returnStepColors = ["bg-amber-500","bg-sky-500","bg-teal-500","bg-violet-500"];
 
   const handleCancel = () => {
     updateOrder.mutate({ orderId, data: { status: "CANCELLED" } }, {
@@ -144,17 +152,14 @@ export function OrderDetailPage() {
       const token = await currentUser?.getIdToken();
       const res = await fetch(`/api/orders/${orderId}/return`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
         body: JSON.stringify({ reason: returnReason, images: returnImages }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error((d as { error?: string }).error ?? "Failed to submit");
       }
-      toast.success("Return request submitted. Our team will contact you shortly.");
+      toast.success("Return request submitted. Our team will review it within 24 hours.");
       setReturnDialogOpen(false);
       qc.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
     } catch (err) {
@@ -169,11 +174,6 @@ export function OrderDetailPage() {
     setTimeout(() => window.print(), 100);
     setTimeout(() => setShowInvoice(false), 1000);
   };
-
-  const stepColors = [
-    "bg-amber-500", "bg-blue-500", "bg-indigo-500",
-    "bg-purple-500", "bg-orange-500", "bg-green-500"
-  ];
 
   return (
     <motion.div
@@ -216,18 +216,15 @@ export function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Progress Stepper */}
-        {order.deliveryType === "DELIVERY" && order.status !== "CANCELLED" && (
+        {/* Standard delivery progress stepper */}
+        {order.deliveryType === "DELIVERY" && !isReturnFlow && order.status !== "CANCELLED" && (
           <div className="mt-5">
             <div className="relative">
-              {/* Progress bar background */}
               <div className="absolute top-3.5 left-0 right-0 h-1 bg-muted rounded-full" />
-              {/* Filled progress */}
               <div
                 className="absolute top-3.5 left-0 h-1 bg-primary rounded-full transition-all duration-700"
                 style={{ width: `${Math.max(0, (currentStepIndex / (ORDER_STEPS.length - 1)) * 100)}%` }}
               />
-              {/* Step dots */}
               <div className="relative flex justify-between">
                 {ORDER_STEPS.map((step, i) => (
                   <div key={step} className="flex flex-col items-center gap-1.5 w-14">
@@ -248,7 +245,76 @@ export function OrderDetailPage() {
           </div>
         )}
 
-        {order.status === "DELIVERED" && returnEnd && (
+        {/* Return flow stepper */}
+        {isReturnFlow && (
+          <div className="mt-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Return Progress</p>
+            <div className="relative">
+              <div className="absolute top-3.5 left-0 right-0 h-1 bg-muted rounded-full" />
+              <div
+                className="absolute top-3.5 left-0 h-1 bg-sky-500 rounded-full transition-all duration-700"
+                style={{ width: `${Math.max(0, (returnStepIndex / (RETURN_STEPS.length - 1)) * 100)}%` }}
+              />
+              <div className="relative flex justify-between">
+                {RETURN_STEPS.map((step, i) => (
+                  <div key={step} className="flex flex-col items-center gap-1.5 w-20">
+                    <div className={`w-7 h-7 rounded-full border-2 border-background flex items-center justify-center text-xs font-bold shadow-sm transition-all duration-500 ${
+                      i < returnStepIndex ? "bg-sky-500 text-white"
+                      : i === returnStepIndex ? `${returnStepColors[i]} text-white scale-110`
+                      : "bg-muted text-muted-foreground"
+                    }`}>
+                      {i < returnStepIndex ? "✓" : i + 1}
+                    </div>
+                    <span className="text-[9px] text-center text-muted-foreground leading-tight hidden md:block">
+                      {getOrderStatusLabel(step)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Return status info banners */}
+            {order.status === "RETURN_PENDING" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 rounded-xl p-3">
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                {notes.startsWith("RETURN_APPROVED:") ? (
+                  <span>Your return has been <strong>approved</strong>. A delivery agent will be assigned to collect your item soon.</span>
+                ) : (
+                  <span>Your return request is under review. Our team will get back to you within 24 hours.</span>
+                )}
+              </div>
+            )}
+            {order.status === "RETURN_IN_TRANSIT" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-sky-50 dark:bg-sky-900/10 text-sky-700 dark:text-sky-300 rounded-xl p-3">
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                <span>A delivery agent is on the way to collect your item. You can track their live location below.</span>
+              </div>
+            )}
+            {order.status === "RETURNED" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-teal-50 dark:bg-teal-900/10 text-teal-700 dark:text-teal-300 rounded-xl p-3">
+                <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                <span>Your item has been collected. <strong>Refund will be initiated within 2-5 business days.</strong></span>
+              </div>
+            )}
+            {order.status === "REFUND_INITIATED" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-violet-50 dark:bg-violet-900/10 text-violet-700 dark:text-violet-300 rounded-xl p-3">
+                <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                <span>Your <strong>refund of {formatPrice(order.total)} has been initiated</strong> and will reflect in your account within 2-5 business days.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Return rejected notice */}
+        {notes.startsWith("RETURN_REJECTED:") && (
+          <div className="mt-4 text-xs flex items-center gap-2 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 rounded-xl p-3">
+            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+            <span>Your return request was not approved. Please contact us for more information.</span>
+          </div>
+        )}
+
+        {/* Return window notice (for delivered orders) */}
+        {order.status === "DELIVERED" && returnEnd && !hasReturnRequest && (
           <div className="mt-4 text-xs flex items-center gap-2 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 rounded-xl p-3">
             <RotateCcw className="w-3.5 h-3.5 shrink-0" />
             {canReturn
@@ -259,19 +325,21 @@ export function OrderDetailPage() {
         )}
       </div>
 
-      {/* Live Tracking Map */}
-      {order.status === "OUT_FOR_DELIVERY" && tracking?.currentLat && tracking?.currentLng && (
+      {/* Live Tracking Map — delivery or return pickup */}
+      {(order.status === "OUT_FOR_DELIVERY" || order.status === "RETURN_IN_TRANSIT") && tracking?.currentLat && tracking?.currentLng && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card border rounded-2xl p-4 mb-4 print:hidden shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <Truck className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Live Tracking</h2>
+            <h2 className="font-semibold">
+              {order.status === "RETURN_IN_TRANSIT" ? "Return Pickup — Live Tracking" : "Live Tracking"}
+            </h2>
             <Badge className="bg-green-100 text-green-700 animate-pulse text-xs">● Live</Badge>
           </div>
           <div className="h-52 rounded-xl overflow-hidden">
             <MapContainer center={[tracking.currentLat, tracking.currentLng]} zoom={14} style={{ height: "100%", width: "100%" }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OpenStreetMap" />
               <Marker position={[tracking.currentLat, tracking.currentLng]} icon={markerIcon}>
-                <Popup>Delivery Agent</Popup>
+                <Popup>{order.status === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Delivery Agent"}</Popup>
               </Marker>
             </MapContainer>
           </div>
@@ -280,7 +348,7 @@ export function OrderDetailPage() {
               <div className="flex items-center gap-2 text-sm">
                 <UserIcon className="w-4 h-4 text-muted-foreground" />
                 <span className="font-medium">{tracking.agentName}</span>
-                <Badge variant="secondary" className="text-xs">Agent</Badge>
+                <Badge variant="secondary" className="text-xs">{order.status === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Agent"}</Badge>
               </div>
               {tracking.agentPhone && (
                 <a href={`tel:${tracking.agentPhone}`} className="text-primary hover:underline text-sm flex items-center gap-1">
@@ -346,7 +414,7 @@ export function OrderDetailPage() {
         <div className="bg-card border rounded-2xl p-5 mb-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <MapPin className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Delivery Address</h2>
+            <h2 className="font-semibold">{isReturnFlow ? "Pickup Address" : "Delivery Address"}</h2>
           </div>
           <p className="text-sm text-muted-foreground">
             {[order.deliveryAddress.street, order.deliveryAddress.city, order.deliveryAddress.state, order.deliveryAddress.pincode].filter(Boolean).join(", ")}
@@ -411,6 +479,7 @@ export function OrderDetailPage() {
           </div>
         </div>
       )}
+
       {/* Return dialog */}
       <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
         <DialogContent className="max-w-md">
@@ -418,7 +487,7 @@ export function OrderDetailPage() {
             <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Request Return</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">Please describe the reason for your return. Our team will contact you within 24 hours.</p>
+            <p className="text-sm text-muted-foreground">Please describe the reason for your return. Our team will review it and contact you within 24 hours.</p>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Reason *</label>
               <textarea
@@ -431,20 +500,10 @@ export function OrderDetailPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Photos (optional, max 3)</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-              <button
-                type="button"
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
+              <button type="button"
                 className="w-full px-3 py-2 text-sm border border-dashed border-muted-foreground/40 rounded-lg hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={returnImages.length >= 3}
-              >
+                onClick={() => fileInputRef.current?.click()} disabled={returnImages.length >= 3}>
                 + Add Photos ({returnImages.length}/3)
               </button>
               {returnImages.length > 0 && (
@@ -452,11 +511,9 @@ export function OrderDetailPage() {
                   {returnImages.map((img, i) => (
                     <div key={i} className="relative">
                       <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover border" />
-                      <button
-                        type="button"
+                      <button type="button"
                         className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-white rounded-full text-[10px] flex items-center justify-center"
-                        onClick={() => setReturnImages(prev => prev.filter((_, j) => j !== i))}
-                      >×</button>
+                        onClick={() => setReturnImages(prev => prev.filter((_, j) => j !== i))}>×</button>
                     </div>
                   ))}
                 </div>

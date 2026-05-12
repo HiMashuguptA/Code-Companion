@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, ExternalLink, Package, Upload } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon, ExternalLink, Package, Upload, Crop, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +20,10 @@ import {
 import type { Product } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+const TARGET_W = 1400;
+const TARGET_H = 525;
+const CROP_ASPECT = TARGET_W / TARGET_H; // ~2.667:1
 
 interface BannerForm {
   title: string;
@@ -52,7 +56,6 @@ export function AdminBanners() {
     query: { queryKey: getListProductsQueryKey({ limit: 200 }), staleTime: 1000 * 60 * 5 },
   });
   const products = (productsData?.products ?? []) as Product[];
-
   const banners = (data ?? []) as BannerRecord[];
 
   const createMut = useCreateBanner();
@@ -65,7 +68,13 @@ export function AdminBanners() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  // Crop dialog state
+  const [cropOpen, setCropOpen] = useState(false);
+  const [rawImage, setRawImage] = useState<HTMLImageElement | null>(null);
+  const [cropOffsetX, setCropOffsetX] = useState(50); // 0-100 percent
+  const [cropOffsetY, setCropOffsetY] = useState(50); // 0-100 percent
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) { toast.error("File too large (max 20 MB)"); return; }
@@ -74,39 +83,94 @@ export function AdminBanners() {
     reader.onload = evt => {
       const img = new Image();
       img.onload = () => {
-        // Banners are wide: cap at 1400×525 only if larger, preserve quality at 0.95
-        const TARGET_W = 1400, TARGET_H = 525;
-        const scale = Math.min(TARGET_W / img.width, TARGET_H / img.height, 1);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { setUploading(false); return; }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-        setForm(f => ({ ...f, imageUrl: dataUrl }));
+        setRawImage(img);
+        setCropOffsetX(50);
+        setCropOffsetY(50);
         setUploading(false);
+        setCropOpen(true); // Open crop dialog
       };
       img.src = evt.target?.result as string;
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }
+  };
+
+  const applyCrop = useCallback(() => {
+    if (!rawImage) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = TARGET_W;
+    canvas.height = TARGET_H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const imgAspect = rawImage.naturalWidth / rawImage.naturalHeight;
+    let srcX: number, srcY: number, srcW: number, srcH: number;
+
+    if (imgAspect > CROP_ASPECT) {
+      // Image wider than crop window — crop horizontally, full height
+      srcH = rawImage.naturalHeight;
+      srcW = rawImage.naturalHeight * CROP_ASPECT;
+      srcX = (rawImage.naturalWidth - srcW) * (cropOffsetX / 100);
+      srcY = 0;
+    } else {
+      // Image taller than crop window — crop vertically, full width
+      srcW = rawImage.naturalWidth;
+      srcH = rawImage.naturalWidth / CROP_ASPECT;
+      srcX = 0;
+      srcY = (rawImage.naturalHeight - srcH) * (cropOffsetY / 100);
+    }
+
+    ctx.drawImage(rawImage, srcX, srcY, srcW, srcH, 0, 0, TARGET_W, TARGET_H);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    setForm(f => ({ ...f, imageUrl: dataUrl }));
+    setCropOpen(false);
+    setRawImage(null);
+  }, [rawImage, cropOffsetX, cropOffsetY]);
+
+  // Computed preview style for the crop viewport
+  const cropPreviewStyle = useCallback(() => {
+    if (!rawImage) return {};
+    const previewW = 560; // dialog width approx
+    const previewH = previewW / CROP_ASPECT;
+    const imgAspect = rawImage.naturalWidth / rawImage.naturalHeight;
+
+    if (imgAspect > CROP_ASPECT) {
+      // Image wider — show full height, offset horizontally
+      const scaledImgW = previewH * imgAspect;
+      const maxOffsetPx = scaledImgW - previewW;
+      const offsetPx = maxOffsetPx * (cropOffsetX / 100);
+      return {
+        backgroundImage: `url(${rawImage.src})`,
+        backgroundSize: `${scaledImgW}px ${previewH}px`,
+        backgroundPosition: `-${offsetPx}px 0px`,
+        backgroundRepeat: "no-repeat",
+        width: "100%",
+        aspectRatio: `${TARGET_W} / ${TARGET_H}`,
+      };
+    } else {
+      // Image taller — show full width, offset vertically
+      const scaledImgH = previewW / imgAspect;
+      const maxOffsetPx = scaledImgH - previewH;
+      const offsetPx = maxOffsetPx * (cropOffsetY / 100);
+      return {
+        backgroundImage: `url(${rawImage.src})`,
+        backgroundSize: `${previewW}px ${scaledImgH}px`,
+        backgroundPosition: `0px -${offsetPx}px`,
+        backgroundRepeat: "no-repeat",
+        width: "100%",
+        aspectRatio: `${TARGET_W} / ${TARGET_H}`,
+      };
+    }
+  }, [rawImage, cropOffsetX, cropOffsetY]);
 
   function openCreate() { setEditingId(null); setForm(EMPTY_FORM); setOpen(true); }
 
   function openEdit(b: BannerRecord) {
     setEditingId(b.id);
     setForm({
-      title: b.title,
-      subtitle: b.subtitle ?? "",
-      imageUrl: b.imageUrl,
-      linkUrl: b.linkUrl ?? "",
-      productId: b.productId ?? "",
-      position: b.position,
-      size: b.size,
-      sortOrder: b.sortOrder ?? 0,
-      isActive: b.isActive,
+      title: b.title, subtitle: b.subtitle ?? "", imageUrl: b.imageUrl,
+      linkUrl: b.linkUrl ?? "", productId: b.productId ?? "",
+      position: b.position, size: b.size, sortOrder: b.sortOrder ?? 0, isActive: b.isActive,
     });
     setOpen(true);
   }
@@ -123,21 +187,13 @@ export function AdminBanners() {
       toast.error("Title and image URL are required"); return;
     }
     const body = {
-      title: form.title.trim(),
-      subtitle: form.subtitle.trim() || undefined,
-      imageUrl: form.imageUrl.trim(),
-      linkUrl: form.linkUrl.trim() || undefined,
-      productId: form.productId || undefined,
-      position: form.position,
-      size: form.size,
-      sortOrder: Number(form.sortOrder) || 0,
-      isActive: form.isActive,
+      title: form.title.trim(), subtitle: form.subtitle.trim() || undefined,
+      imageUrl: form.imageUrl.trim(), linkUrl: form.linkUrl.trim() || undefined,
+      productId: form.productId || undefined, position: form.position,
+      size: form.size, sortOrder: Number(form.sortOrder) || 0, isActive: form.isActive,
     };
     const cb = {
-      onSuccess: () => {
-        toast.success(editingId ? "Banner updated" : "Banner created");
-        setOpen(false); invalidateAll();
-      },
+      onSuccess: () => { toast.success(editingId ? "Banner updated" : "Banner created"); setOpen(false); invalidateAll(); },
       onError: () => toast.error(editingId ? "Failed to update banner" : "Failed to create banner"),
     };
     if (editingId) updateMut.mutate({ bannerId: editingId, data: body }, cb);
@@ -158,6 +214,9 @@ export function AdminBanners() {
 
   const linkedProductName = (productId?: string | null) =>
     productId ? products.find(p => p.id === productId)?.name : null;
+
+  const needsHorizontalCrop = rawImage && (rawImage.naturalWidth / rawImage.naturalHeight) > CROP_ASPECT;
+  const needsVerticalCrop = rawImage && (rawImage.naturalWidth / rawImage.naturalHeight) <= CROP_ASPECT;
 
   return (
     <div>
@@ -190,9 +249,7 @@ export function AdminBanners() {
               <div key={b.id} className="bg-card border rounded-xl overflow-hidden flex flex-col sm:flex-row">
                 <div className="sm:w-48 h-32 sm:h-auto shrink-0 bg-muted">
                   {b.imageUrl ? <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover" /> : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <ImageIcon className="w-8 h-8" />
-                    </div>
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-8 h-8" /></div>
                   )}
                 </div>
                 <div className="flex-1 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -208,13 +265,9 @@ export function AdminBanners() {
                     </div>
                     {b.subtitle && <p className="text-sm text-muted-foreground line-clamp-2">{b.subtitle}</p>}
                     {linkedName ? (
-                      <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1">
-                        <Package className="w-3 h-3" /> Links to product: {linkedName}
-                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1"><Package className="w-3 h-3" /> Links to product: {linkedName}</p>
                     ) : b.linkUrl ? (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                        <ExternalLink className="w-3 h-3" /> {b.linkUrl}
-                      </p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><ExternalLink className="w-3 h-3" /> {b.linkUrl}</p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -231,6 +284,7 @@ export function AdminBanners() {
         </div>
       )}
 
+      {/* Banner form dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -258,17 +312,25 @@ export function AdminBanners() {
                 <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5"
                   onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   <Upload className="w-3.5 h-3.5" />
-                  {uploading ? "Processing…" : "Upload"}
+                  {uploading ? "Loading…" : "Upload"}
                 </Button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-              <p className="text-xs text-muted-foreground mt-1">Tip: Upload a wide banner image (e.g. 1400×525 px). JPG/PNG/WebP accepted, max 20 MB.</p>
+              <p className="text-xs text-muted-foreground mt-1">Tip: Upload any image — you can crop/position it after uploading. Ideal output: 1400×525 px.</p>
               {form.imageUrl && (
                 <div className="mt-2 rounded-lg overflow-hidden border h-28 bg-muted relative group">
                   <img src={form.imageUrl} alt="preview" className="w-full h-full object-cover" />
-                  <button type="button"
-                    className="absolute top-1.5 right-1.5 bg-destructive text-destructive-foreground rounded-md px-2 py-0.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setForm(f => ({ ...f, imageUrl: "" }))}>Remove</button>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    {form.imageUrl.startsWith("data:") && (
+                      <Button type="button" size="sm" variant="secondary" className="gap-1 text-xs"
+                        onClick={() => { setRawImage(null); setCropOffsetX(50); setCropOffsetY(50); /* re-open crop */ fileInputRef.current?.click(); }}>
+                        <Crop className="w-3 h-3" /> Re-crop
+                      </Button>
+                    )}
+                    <button type="button"
+                      className="bg-destructive text-destructive-foreground rounded-md px-2 py-1 text-xs"
+                      onClick={() => setForm(f => ({ ...f, imageUrl: "" }))}>Remove</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -278,24 +340,14 @@ export function AdminBanners() {
                 <SelectTrigger><SelectValue placeholder="No product (use custom URL)" /></SelectTrigger>
                 <SelectContent className="max-h-60 overflow-y-auto">
                   <SelectItem value="__none">— No product (use custom URL below) —</SelectItem>
-                  {products.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
+                  {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                When a product is selected, clicking the banner takes the user to that product's page.
-              </p>
             </div>
             <div>
               <Label htmlFor="b-link">Custom Link URL</Label>
-              <Input id="b-link" value={form.linkUrl}
-                onChange={e => setForm(f => ({ ...f, linkUrl: e.target.value }))}
-                placeholder="/?category=pens-pencils"
-                disabled={!!form.productId} />
-              <p className="text-xs text-muted-foreground mt-1">
-                Used only when no product is selected. Examples: <code>/?category=pens-pencils</code>, <code>/refer</code>
-              </p>
+              <Input id="b-link" value={form.linkUrl} onChange={e => setForm(f => ({ ...f, linkUrl: e.target.value }))}
+                placeholder="/?category=pens-pencils" disabled={!!form.productId} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -338,6 +390,56 @@ export function AdminBanners() {
             <Button onClick={handleSubmit} disabled={createMut.isPending || updateMut.isPending}>
               {editingId ? "Save Changes" : "Create Banner"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Crop / Position dialog */}
+      <Dialog open={cropOpen} onOpenChange={open => { if (!open) { setCropOpen(false); setRawImage(null); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Crop className="w-4 h-4" /> Crop & Position Banner</DialogTitle>
+            <DialogDescription>
+              The dashed frame shows exactly what will appear in the banner (1400×525). Adjust the slider to reposition the image.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Live crop preview */}
+            <div className="rounded-xl overflow-hidden border-2 border-dashed border-primary/50" style={cropPreviewStyle()} />
+
+            {/* Offset sliders */}
+            {needsHorizontalCrop && (
+              <div>
+                <Label className="text-sm flex items-center gap-2 mb-1">
+                  <ChevronLeft className="w-4 h-4" /> Horizontal Position <ChevronRight className="w-4 h-4" />
+                </Label>
+                <input type="range" min={0} max={100} value={cropOffsetX}
+                  onChange={e => setCropOffsetX(Number(e.target.value))}
+                  className="w-full accent-primary" />
+                <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
+                  <span>Left</span><span>Center</span><span>Right</span>
+                </div>
+              </div>
+            )}
+            {needsVerticalCrop && (
+              <div>
+                <Label className="text-sm mb-1 block">Vertical Position</Label>
+                <input type="range" min={0} max={100} value={cropOffsetY}
+                  onChange={e => setCropOffsetY(Number(e.target.value))}
+                  className="w-full accent-primary" />
+                <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
+                  <span>Top</span><span>Center</span><span>Bottom</span>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">The final image will be exported at 1400×525 px (JPEG 95% quality).</p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCropOpen(false); setRawImage(null); }}>Cancel</Button>
+            <Button onClick={applyCrop} className="gap-1.5"><Crop className="w-4 h-4" /> Apply Crop</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
