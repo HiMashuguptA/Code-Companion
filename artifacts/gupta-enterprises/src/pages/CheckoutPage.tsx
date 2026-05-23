@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   useGetCart, useCreateOrder, useGetMyReferralInfo,
   getGetCartQueryKey, getGetMyReferralInfoQueryKey, getListMyCoinTransactionsQueryKey,
@@ -52,7 +53,7 @@ export function CheckoutPage() {
   const { currentUser, dbUser } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: cart } = useGetCart({
+  const { data: cart, isLoading: cartLoading } = useGetCart({
     query: {
       queryKey: getGetCartQueryKey(), enabled: !!currentUser, retry: false,
       staleTime: 1000 * 60 * 5, gcTime: 1000 * 60 * 10,
@@ -200,7 +201,7 @@ export function CheckoutPage() {
     return (
       <div className="container mx-auto px-4 py-16 max-w-md text-center">
         <div className="mb-6 flex justify-center">
-          <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
             <CheckCircle className="w-12 h-12 text-green-600" />
           </div>
         </div>
@@ -215,6 +216,40 @@ export function CheckoutPage() {
         <div className="flex flex-col gap-3">
           <Button onClick={() => navigate(`/orders/${orderId}`)}>Track Order</Button>
           <Button variant="outline" onClick={() => navigate("/")}>Continue Shopping</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Skeleton loader while cart loads
+  if (cartLoading && !cart) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <Skeleton className="h-8 w-48 mb-8" />
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            <div className="bg-card border rounded-xl p-5 space-y-4">
+              <Skeleton className="h-6 w-40" />
+              <div className="grid grid-cols-2 gap-3"><Skeleton className="h-24 rounded-lg" /><Skeleton className="h-24 rounded-lg" /></div>
+            </div>
+            <div className="bg-card border rounded-xl p-5 space-y-4">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="bg-card border rounded-xl p-5 space-y-4">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-48 w-full rounded-lg" />
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-card border rounded-xl p-5 space-y-4">
+              <Skeleton className="h-6 w-32" />
+              <div className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /></div>
+              <Skeleton className="h-12 w-full" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -319,7 +354,7 @@ export function CheckoutPage() {
               </div>
 
               {markerSet && (
-                <div className={`flex items-center gap-2 p-3 rounded-lg mb-4 text-sm ${deliverable ? "bg-green-50 dark:bg-green-900/10 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400"}`}>
+                <div className={`flex items-center gap-2 p-3 rounded-lg mb-4 text-sm ${deliverable ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
                   {deliverable ? (
                     <><CheckCircle className="w-4 h-4 shrink-0" />
                       <span>✅ Deliverable! You're <strong>{distanceKm}km</strong> from our shop. Within our {SHOP_CONFIG.deliveryRadiusKm}km delivery zone.</span></>
@@ -378,7 +413,7 @@ export function CheckoutPage() {
 
           {/* Super Coins redemption */}
           {availableCoins > 0 && (
-            <section className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300/50 rounded-xl p-5">
+            <section className="bg-amber-50/50 border border-amber-300/50 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Coins className="w-5 h-5 text-amber-500" />
@@ -471,7 +506,7 @@ export function CheckoutPage() {
           </div>
 
           {deliveryType === "DELIVERY" && markerSet && !deliverable && (
-            <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400 rounded-lg p-2 mb-3 text-xs">
+            <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg p-2 mb-3 text-xs">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               Location outside delivery range
             </div>

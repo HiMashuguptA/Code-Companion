@@ -13,7 +13,7 @@ export function AuthPage() {
   }, [currentUser, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#2874F0]/8 via-background to-amber-50/30 dark:to-amber-950/10 px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#2874F0]/8 via-background to-amber-50/30 px-4 py-12">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

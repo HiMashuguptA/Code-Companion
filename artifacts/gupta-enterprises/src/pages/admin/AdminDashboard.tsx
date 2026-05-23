@@ -76,11 +76,11 @@ export function AdminDashboard() {
   });
 
   const stats = [
-    { label: "Total Sales", value: formatPrice(analytics?.totalRevenue ?? 0), icon: IndianRupee, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", href: "/admin/orders" },
-    { label: "Total Orders", value: analytics?.totalOrders ?? 0, icon: ShoppingBag, color: "text-saffron-600", bg: "bg-orange-50 dark:bg-orange-900/20", href: "/admin/orders" },
-    { label: "Total Users", value: analytics?.totalUsers ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", href: "/admin/users" },
-    { label: "Total Products", value: analytics?.totalProducts ?? 0, icon: Package, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20", href: "/admin/products" },
-    { label: "Pending Orders", value: analytics?.pendingOrders ?? 0, icon: Tag, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", href: "/admin/orders" },
+    { label: "Total Sales", value: formatPrice(analytics?.totalRevenue ?? 0), icon: IndianRupee, color: "text-green-600", bg: "bg-green-50", href: "/admin/orders" },
+    { label: "Total Orders", value: analytics?.totalOrders ?? 0, icon: ShoppingBag, color: "text-saffron-600", bg: "bg-orange-50", href: "/admin/orders" },
+    { label: "Total Users", value: analytics?.totalUsers ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50", href: "/admin/users" },
+    { label: "Total Products", value: analytics?.totalProducts ?? 0, icon: Package, color: "text-purple-600", bg: "bg-purple-50", href: "/admin/products" },
+    { label: "Pending Orders", value: analytics?.pendingOrders ?? 0, icon: Tag, color: "text-amber-600", bg: "bg-amber-50", href: "/admin/orders" },
   ];
 
   const rangeTotalRevenue = (salesRange ?? []).reduce((s, d) => s + Number(d.revenue ?? 0), 0);
@@ -133,11 +133,11 @@ export function AdminDashboard() {
       {/* Inventory insights */}
       {inventory && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <InsightCard label="SKUs" value={inventory.totalSkus} icon={Package} color="text-blue-600" bg="bg-blue-50 dark:bg-blue-900/20" />
-          <InsightCard label="Stock Units" value={inventory.totalStockUnits} icon={Boxes} color="text-indigo-600" bg="bg-indigo-50 dark:bg-indigo-900/20" />
-          <InsightCard label="Inventory Value" value={formatPrice(inventory.inventoryValue)} icon={IndianRupee} color="text-green-600" bg="bg-green-50 dark:bg-green-900/20" />
-          <InsightCard label="Low Stock" value={inventory.lowStock} icon={AlertTriangle} color={inventory.lowStock > 0 ? "text-amber-600" : "text-muted-foreground"} bg="bg-amber-50 dark:bg-amber-900/20" />
-          <InsightCard label="Out of Stock" value={inventory.outOfStock} icon={AlertTriangle} color={inventory.outOfStock > 0 ? "text-red-600" : "text-muted-foreground"} bg="bg-red-50 dark:bg-red-900/20" />
+          <InsightCard label="SKUs" value={inventory.totalSkus} icon={Package} color="text-blue-600" bg="bg-blue-50" />
+          <InsightCard label="Stock Units" value={inventory.totalStockUnits} icon={Boxes} color="text-indigo-600" bg="bg-indigo-50" />
+          <InsightCard label="Inventory Value" value={formatPrice(inventory.inventoryValue)} icon={IndianRupee} color="text-green-600" bg="bg-green-50" />
+          <InsightCard label="Low Stock" value={inventory.lowStock} icon={AlertTriangle} color={inventory.lowStock > 0 ? "text-amber-600" : "text-muted-foreground"} bg="bg-amber-50" />
+          <InsightCard label="Out of Stock" value={inventory.outOfStock} icon={AlertTriangle} color={inventory.outOfStock > 0 ? "text-red-600" : "text-muted-foreground"} bg="bg-red-50" />
         </div>
       )}
 

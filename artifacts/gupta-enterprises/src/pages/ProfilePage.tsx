@@ -71,12 +71,12 @@ export function ProfilePage() {
             {profile?.photoUrl ? (
               <img src={profile.photoUrl} alt={profile.name ?? "User"} className="w-full h-full object-cover" />
             ) : (
-              (profile?.name ?? currentUser.email ?? "U")[0]?.toUpperCase()
+              (profile?.name ?? currentUser.name ?? "U")[0]?.toUpperCase()
             )}
           </div>
           <div>
             <p className="font-semibold text-lg">{profile?.name ?? "No name set"}</p>
-            <p className="text-sm text-muted-foreground">{profile?.email ?? currentUser.email}</p>
+            <p className="text-sm text-muted-foreground">{profile?.email ?? currentUser.id}</p>
             <Badge variant="secondary" className="mt-1 text-xs capitalize">
               {(dbUser?.role ?? "USER").toLowerCase().replace("_", " ")}
             </Badge>
@@ -104,7 +104,7 @@ export function ProfilePage() {
 
           <div>
             <Label className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
-            <p className="mt-1 text-sm">{profile?.email ?? currentUser.email}</p>
+            <p className="mt-1 text-sm">{profile?.email ?? currentUser.id}</p>
           </div>
 
           <div>

@@ -88,13 +88,13 @@ export function ReferEarnPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 dark:from-amber-950 dark:via-orange-950 dark:to-yellow-950 border border-amber-300/40 p-8 mb-6 text-center">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 border border-amber-300/40 p-8 mb-6 text-center">
         <Sparkles className="absolute top-4 right-4 w-6 h-6 text-amber-500/60" />
         <Sparkles className="absolute bottom-4 left-4 w-5 h-5 text-amber-500/60" />
         <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/15 flex items-center justify-center mb-4">
           <Gift className="w-8 h-8 text-amber-600" />
         </div>
-        <Badge className="mb-3 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/15">Refer & Earn Super Coins</Badge>
+        <Badge className="mb-3 bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/15">Refer & Earn Super Coins</Badge>
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">Give 50, Get 100</h1>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
           Invite a friend to {SHOP_CONFIG.name}. They get <strong>50 Super Coins</strong> on signup, and you earn <strong>100 Coins</strong> when they place their first order. 1 Coin = ₹1.
@@ -151,7 +151,7 @@ export function ReferEarnPage() {
               const positive = tx.amount > 0;
               return (
                 <li key={tx.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${positive ? "bg-green-100 dark:bg-green-900/30 text-green-600" : "bg-red-100 dark:bg-red-900/30 text-red-600"}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${positive ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"}`}>
                     {positive ? <ArrowDownCircle className="w-5 h-5" /> : <ArrowUpCircle className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 min-w-0">

@@ -128,7 +128,7 @@ export function DeliveryPortal() {
           <h1 className="text-2xl font-bold">Delivery Portal</h1>
           <p className="text-sm text-muted-foreground">Manage your deliveries</p>
         </div>
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+        <Badge className="bg-green-100 text-green-700">
           {activeOrders.length} Active
         </Badge>
       </div>
@@ -167,7 +167,7 @@ export function DeliveryPortal() {
               <>
                 <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mt-4">Completed Today</h2>
                 {completedOrders.slice(0, 5).map((order: Order) => (
-                  <div key={order.id} className="bg-card border border-green-200 dark:border-green-800 rounded-xl p-4 opacity-70">
+                  <div key={order.id} className="bg-card border border-green-200 rounded-xl p-4 opacity-70">
                     <div className="flex justify-between items-start">
                       <p className="font-medium text-sm">#{order.id.slice(-8).toUpperCase()}</p>
                       <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
@@ -235,13 +235,13 @@ export function DeliveryPortal() {
                   </div>
 
                   {(selectedOrder as any).contactDetails && (
-                    <div className="p-4 border-b bg-blue-50 dark:bg-blue-950/20">
+                    <div className="p-4 border-b bg-blue-50">
                       <p className="text-xs font-medium text-muted-foreground mb-2">Customer Contact</p>
                       <div className="space-y-1">
                         <p className="text-sm font-medium">{(selectedOrder as any).contactDetails.name}</p>
                         <a 
                           href={`tel:${(selectedOrder as any).contactDetails.phone}`}
-                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                          className="text-sm text-blue-600 hover:underline"
                         >
                           {(selectedOrder as any).contactDetails.phone}
                         </a>

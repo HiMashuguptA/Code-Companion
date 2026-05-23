@@ -61,7 +61,7 @@ export function AdminReturns() {
   });
 
   const { data: usersResponse } = useListUsers({}, {
-    query: { staleTime: 1000 * 60 * 5 },
+    query: { queryKey: ["admin-users-list"], staleTime: 1000 * 60 * 5 },
   });
   const deliveryAgents = (
     Array.isArray(usersResponse)
@@ -145,7 +145,7 @@ export function AdminReturns() {
             const photos = order.returnImages ?? [];
             const isPending = order.status === "RETURN_PENDING" && (order.notes ?? "").startsWith("RETURN_REQUESTED:");
             return (
-              <div key={order.id} className={`bg-card border rounded-xl p-4 ${isPending ? "border-orange-300 dark:border-orange-900" : ""}`}>
+              <div key={order.id} className={`bg-card border rounded-xl p-4 ${isPending ? "border-orange-300" : ""}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -323,7 +323,7 @@ export function AdminReturns() {
 
                 {isAssignStep && (
                   <div className="space-y-3">
-                    <p className="text-xs text-blue-600 bg-blue-50 dark:bg-blue-900/10 rounded-lg px-3 py-2">
+                    <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
                       ✅ Return approved. Assign a delivery agent to collect the item from the customer.
                     </p>
                     <div>
@@ -348,7 +348,7 @@ export function AdminReturns() {
 
                 {isInTransit && (
                   <div className="space-y-3">
-                    <p className="text-xs text-sky-600 bg-sky-50 dark:bg-sky-900/10 rounded-lg px-3 py-2">
+                    <p className="text-xs text-sky-600 bg-sky-50 rounded-lg px-3 py-2">
                       🚴 Agent is heading to the customer. Once item is physically collected, mark as returned.
                     </p>
                     <Button className="w-full gap-1 bg-teal-600 hover:bg-teal-700 text-white" disabled={!!actionPending}
@@ -360,7 +360,7 @@ export function AdminReturns() {
 
                 {isReturned && (
                   <div className="space-y-3">
-                    <p className="text-xs text-teal-600 bg-teal-50 dark:bg-teal-900/10 rounded-lg px-3 py-2">
+                    <p className="text-xs text-teal-600 bg-teal-50 rounded-lg px-3 py-2">
                       📦 Item received. Click below to initiate the refund of <strong>{formatPrice(selectedOrder.total)}</strong>. Coins & stock will be restored automatically.
                     </p>
                     <Button className="w-full gap-1 bg-violet-600 hover:bg-violet-700 text-white" disabled={!!actionPending}
@@ -371,7 +371,7 @@ export function AdminReturns() {
                 )}
 
                 {isRefundDone && (
-                  <div className="text-xs text-violet-600 bg-violet-50 dark:bg-violet-900/10 rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2 text-center">
                     ✅ Refund has been initiated. This return is closed.
                   </div>
                 )}

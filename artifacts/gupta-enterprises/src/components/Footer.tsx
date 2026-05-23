@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <footer className="border-t bg-card mt-12">
       <div className="container mx-auto px-4 py-10">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-8">
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
@@ -41,6 +41,15 @@ export function Footer() {
               <li><Link href="/favorites" className="hover:text-primary">Favorites</Link></li>
               <li><Link href="/refer" className="hover:text-primary flex items-center gap-1"><Gift className="w-3 h-3" /> Refer & Earn</Link></li>
               <li><Link href="/profile" className="hover:text-primary">Profile</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-sm mb-3">Legal</h3>
+            <ul className="space-y-2 text-xs text-muted-foreground">
+              <li><Link href="/terms" className="hover:text-primary">Terms & Conditions</Link></li>
+              <li><span className="hover:text-primary cursor-pointer">Privacy Policy</span></li>
+              <li><span className="hover:text-primary cursor-pointer">Return Policy</span></li>
             </ul>
           </div>
 

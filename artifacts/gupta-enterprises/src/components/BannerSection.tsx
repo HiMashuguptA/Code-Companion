@@ -22,10 +22,10 @@ interface BannerSectionProps {
 }
 
 const sizeClasses: Record<BannerLike["size"], string> = {
-  SMALL: "h-24 sm:h-32",
-  MEDIUM: "h-40 sm:h-56",
-  LARGE: "h-56 sm:h-80",
-  FULL: "h-44 sm:h-64 md:h-80",
+  SMALL: "h-28 sm:h-36",
+  MEDIUM: "h-44 sm:h-60",
+  LARGE: "h-60 sm:h-80",
+  FULL: "h-48 sm:h-64 md:h-80",
 };
 
 export function BannerSection({ position, className = "" }: BannerSectionProps) {
@@ -72,7 +72,8 @@ export function BannerSection({ position, className = "" }: BannerSectionProps) 
               </div>
             </div>
           );
-          return b.linkUrl ? <Link key={b.id} href={b.linkUrl}>{inner}</Link> : <div key={b.id}>{inner}</div>;
+          const bannerHref = b.productId ? `/products/${b.productId}` : (b.linkUrl ?? undefined);
+          return bannerHref ? <Link key={b.id} href={bannerHref}>{inner}</Link> : <div key={b.id}>{inner}</div>;
         })}
       </div>
     </section>
@@ -116,7 +117,10 @@ function CarouselBanner({ banners, className }: { banners: BannerLike[]; classNa
                 key={b.id}
                 className={`absolute inset-0 transition-opacity duration-700 ${i === idx ? "opacity-100" : "opacity-0 pointer-events-none"}`}
               >
-                {b.linkUrl ? <Link href={b.linkUrl}><div className="relative h-full cursor-pointer">{inner}</div></Link> : <div className="relative h-full">{inner}</div>}
+                {(() => {
+                  const slideHref = b.productId ? `/products/${b.productId}` : (b.linkUrl ?? undefined);
+                  return slideHref ? <Link href={slideHref}><div className="relative h-full cursor-pointer">{inner}</div></Link> : <div className="relative h-full">{inner}</div>;
+                })()}
               </div>
             );
             return slide;

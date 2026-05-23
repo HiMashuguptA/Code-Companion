@@ -19,6 +19,7 @@ export type DbUser = {
 type ReplitUser = {
   id: string;
   name: string;
+  email?: string;
   profileImage?: string;
 };
 
@@ -37,9 +38,9 @@ async function fetchReplitUser(): Promise<ReplitUser | null> {
   try {
     const res = await fetch("/__replauthuser");
     if (!res.ok) return null;
-    const data = await res.json() as { id?: string; name?: string; profileImage?: string };
+    const data = await res.json() as { id?: string; name?: string; email?: string; profileImage?: string };
     if (!data.id) return null;
-    return { id: data.id, name: data.name ?? data.id, profileImage: data.profileImage };
+    return { id: data.id, name: data.name ?? data.id, email: data.email, profileImage: data.profileImage };
   } catch {
     return null;
   }
@@ -54,6 +55,7 @@ async function syncWithBackend(replitUser: ReplitUser, referralCode?: string): P
       body: JSON.stringify({
         replitUserId: replitUser.id,
         name: replitUser.name,
+        email: replitUser.email,
         photoUrl: replitUser.profileImage,
         referralCode,
       }),

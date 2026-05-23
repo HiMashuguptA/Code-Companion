@@ -321,9 +321,9 @@ export function HomePage() {
   const activeFilterCount = [search, category, minPrice, maxPrice, minDiscount, inStock ? "1" : "", ...selectedTags].filter(Boolean).length;
 
   return (
-    <div className="bg-[#f1f3f6] dark:bg-background min-h-screen">
+    <div className="bg-[#f1f3f6] min-h-screen">
       {/* Category strip */}
-      <div className="bg-white dark:bg-card border-b">
+      <div className="bg-white border-b">
         <CategoryNavBar />
       </div>
 
@@ -334,7 +334,7 @@ export function HomePage() {
       {!hasFilters && (
         <div className="container mx-auto px-2 sm:px-4 space-y-3 mt-3">
           {featuredProducts.length > 0 && (
-            <HorizontalRail title="Featured Products" icon={<Sparkles className="w-4 h-4 text-[#2874F0]" />} products={featuredProducts} viewAllHref="/?featured=true" />
+            <HorizontalRail title="Featured Products" icon={<Sparkles className="w-4 h-4 text-[#2874F0]" />} products={featuredProducts} viewAllHref="/?featured=true" viewAllLabel="View All Featured" />
           )}
           {bestDiscounts.length > 0 && (
             <HorizontalRail
@@ -342,11 +342,11 @@ export function HomePage() {
               icon={<Flame className="w-4 h-4 text-red-500" />}
               suffix={<Badge className="bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/10">Up to {Math.max(...bestDiscounts.map(p => Number(p.discount ?? 0)))}% OFF</Badge>}
               products={bestDiscounts}
-              viewAllHref="/?sort=discount"
+              viewAllHref="/?sort=discount" viewAllLabel="View All Deals"
             />
           )}
           {topSelling.length > 0 && (
-            <HorizontalRail title="Top Selling" icon={<Star className="w-4 h-4 text-amber-500" />} products={topSelling} showRank viewAllHref="/?sort=popularity" />
+            <HorizontalRail title="Top Selling" icon={<Star className="w-4 h-4 text-amber-500" />} products={topSelling} showRank viewAllHref="/?sort=popularity" viewAllLabel="View All Top Selling" />
           )}
           {wishlistProducts.length > 0 && (
             <HorizontalRail title="Your Wishlist" icon={<Heart className="w-4 h-4 text-rose-500 fill-rose-500" />} products={wishlistProducts} viewAllHref="/wishlist" />
@@ -368,7 +368,7 @@ export function HomePage() {
 
       {/* All Products Section */}
       <section className="container mx-auto px-2 sm:px-4 py-3">
-        <div className="bg-white dark:bg-card rounded-xl shadow-sm p-4">
+        <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <h2 className="font-bold text-base flex items-center gap-2">
               {search ? <>🔍 Results for <span className="text-[#2874F0]">"{search}"</span></> :
@@ -551,7 +551,7 @@ export function HomePage() {
       {/* About + Map */}
       <section className="container mx-auto px-2 sm:px-4 py-6">
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-card border rounded-xl p-6">
+          <div className="bg-white border rounded-xl p-6">
             <h2 className="text-xl font-bold mb-3">About Gupta Enterprises</h2>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
               Established in {SHOP_CONFIG.since} by <strong>{SHOP_CONFIG.ownerName}</strong>, Gupta Enterprises has been Kohima's trusted destination for quality stationery, art supplies, and office essentials. Located at Khedi Market, New NST — right opposite Hotel Galaxy.
@@ -576,7 +576,7 @@ export function HomePage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-card border rounded-xl overflow-hidden">
+          <div className="bg-white border rounded-xl overflow-hidden">
             <div className="h-52">
               <MapContainer center={[SHOP_CONFIG.lat, SHOP_CONFIG.lng]} zoom={15} style={{ height: "100%", width: "100%" }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OpenStreetMap" />
@@ -615,7 +615,7 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
 
 // Single horizontal scrollable rail — 1 row of product cards
 function HorizontalRail({
-  title, icon, products, suffix, showRank = false, viewAllHref,
+  title, icon, products, suffix, showRank = false, viewAllHref, viewAllLabel,
 }: {
   title: string;
   icon?: React.ReactNode;
@@ -623,6 +623,7 @@ function HorizontalRail({
   suffix?: React.ReactNode;
   showRank?: boolean;
   viewAllHref?: string;
+  viewAllLabel?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -632,7 +633,7 @@ function HorizontalRail({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.3 }}
-      className="bg-white dark:bg-card rounded-xl shadow-sm p-4"
+      className="bg-white rounded-xl shadow-sm p-4"
     >
       <div className="flex items-center gap-2 mb-3">
         {icon}
@@ -640,7 +641,7 @@ function HorizontalRail({
         {suffix}
         {viewAllHref && (
           <Link href={viewAllHref} className="ml-auto text-xs text-[#2874F0] hover:underline flex items-center gap-0.5 shrink-0">
-            View All <ChevronRight className="w-3 h-3" />
+            {viewAllLabel || "View All"} <ChevronRight className="w-3 h-3" />
           </Link>
         )}
       </div>
@@ -650,7 +651,7 @@ function HorizontalRail({
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {products.map((p, i) => (
-          <div key={p.id} className="shrink-0 w-[160px] sm:w-[180px] relative">
+          <div key={p.id} className="shrink-0 w-[140px] sm:w-[170px] md:w-[180px] relative">
             {showRank && i < 3 && (
               <div className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shadow ${
                 i === 0 ? "bg-yellow-500" : i === 1 ? "bg-gray-400" : "bg-amber-600"

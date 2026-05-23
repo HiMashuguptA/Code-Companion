@@ -19,9 +19,9 @@ const roleIcons = {
 };
 
 const roleColors: Record<string, string> = {
-  ADMIN: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-  DELIVERY_AGENT: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  USER: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  ADMIN: "bg-purple-100 text-purple-700",
+  DELIVERY_AGENT: "bg-blue-100 text-blue-700",
+  USER: "bg-gray-100 text-gray-700",
 };
 
 export function AdminUsers() {

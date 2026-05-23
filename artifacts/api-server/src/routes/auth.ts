@@ -54,9 +54,20 @@ router.post("/replit-callback", async (req, res) => {
   }
 
   try {
-    const existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, replitUserId));
-
+    let existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, replitUserId));
     let user = existing[0];
+
+    // If not found by firebaseUid, try by email to link existing accounts
+    if (!user && email) {
+      const byEmail = await db.select().from(usersTable).where(eq(usersTable.email, email));
+      if (byEmail.length > 0) {
+        user = byEmail[0];
+        // Update firebaseUid to link this new auth provider
+        await db.update(usersTable)
+          .set({ firebaseUid: replitUserId, name: name ?? user.name, photoUrl: photoUrl ?? user.photoUrl })
+          .where(eq(usersTable.id, user.id));
+      }
+    }
 
     if (!user) {
       // New user — register

@@ -66,11 +66,11 @@ export function OrderDetailPage() {
     }
   });
 
-  const isReturnInTransit = order?.status === "RETURN_IN_TRANSIT";
+  const isReturnInTransit = (order?.status as string) === "RETURN_IN_TRANSIT";
   const { data: tracking } = useGetOrderTracking(orderId, {
     query: {
       queryKey: getGetOrderTrackingQueryKey(orderId),
-      enabled: !!orderId && !!currentUser && (order?.status === "OUT_FOR_DELIVERY" || isReturnInTransit),
+      enabled: !!orderId && !!currentUser && ((order?.status as string) === "OUT_FOR_DELIVERY" || isReturnInTransit),
       refetchInterval: 5000
     }
   });
@@ -274,8 +274,8 @@ export function OrderDetailPage() {
             </div>
 
             {/* Return status info banners */}
-            {order.status === "RETURN_PENDING" && (
-              <div className="mt-4 text-xs flex items-center gap-2 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 rounded-xl p-3">
+            {(order.status as string) === "RETURN_PENDING" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-amber-50 text-amber-700 rounded-xl p-3">
                 <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                 {notes.startsWith("RETURN_APPROVED:") ? (
                   <span>Your return has been <strong>approved</strong>. A delivery agent will be assigned to collect your item soon.</span>
@@ -284,20 +284,20 @@ export function OrderDetailPage() {
                 )}
               </div>
             )}
-            {order.status === "RETURN_IN_TRANSIT" && (
-              <div className="mt-4 text-xs flex items-center gap-2 bg-sky-50 dark:bg-sky-900/10 text-sky-700 dark:text-sky-300 rounded-xl p-3">
+            {(order.status as string) === "RETURN_IN_TRANSIT" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-sky-50 text-sky-700 rounded-xl p-3">
                 <Truck className="w-3.5 h-3.5 shrink-0" />
                 <span>A delivery agent is on the way to collect your item. You can track their live location below.</span>
               </div>
             )}
-            {order.status === "RETURNED" && (
-              <div className="mt-4 text-xs flex items-center gap-2 bg-teal-50 dark:bg-teal-900/10 text-teal-700 dark:text-teal-300 rounded-xl p-3">
+            {(order.status as string) === "RETURNED" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-teal-50 text-teal-700 rounded-xl p-3">
                 <RefreshCw className="w-3.5 h-3.5 shrink-0" />
                 <span>Your item has been collected. <strong>Refund will be initiated within 2-5 business days.</strong></span>
               </div>
             )}
-            {order.status === "REFUND_INITIATED" && (
-              <div className="mt-4 text-xs flex items-center gap-2 bg-violet-50 dark:bg-violet-900/10 text-violet-700 dark:text-violet-300 rounded-xl p-3">
+            {(order.status as string) === "REFUND_INITIATED" && (
+              <div className="mt-4 text-xs flex items-center gap-2 bg-violet-50 text-violet-700 rounded-xl p-3">
                 <DollarSign className="w-3.5 h-3.5 shrink-0" />
                 <span>Your <strong>refund of {formatPrice(order.total)} has been initiated</strong> and will reflect in your account within 2-5 business days.</span>
               </div>
@@ -307,7 +307,7 @@ export function OrderDetailPage() {
 
         {/* Return rejected notice */}
         {notes.startsWith("RETURN_REJECTED:") && (
-          <div className="mt-4 text-xs flex items-center gap-2 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 rounded-xl p-3">
+          <div className="mt-4 text-xs flex items-center gap-2 bg-red-50 text-red-700 rounded-xl p-3">
             <RotateCcw className="w-3.5 h-3.5 shrink-0" />
             <span>Your return request was not approved. Please contact us for more information.</span>
           </div>
@@ -315,7 +315,7 @@ export function OrderDetailPage() {
 
         {/* Return window notice (for delivered orders) */}
         {order.status === "DELIVERED" && returnEnd && !hasReturnRequest && (
-          <div className="mt-4 text-xs flex items-center gap-2 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 rounded-xl p-3">
+          <div className="mt-4 text-xs flex items-center gap-2 bg-blue-50 text-blue-700 rounded-xl p-3">
             <RotateCcw className="w-3.5 h-3.5 shrink-0" />
             {canReturn
               ? <span>2-day return policy active — returnable until <strong>{formatDate(returnEnd)}</strong>.</span>
@@ -326,12 +326,12 @@ export function OrderDetailPage() {
       </div>
 
       {/* Live Tracking Map — delivery or return pickup */}
-      {(order.status === "OUT_FOR_DELIVERY" || order.status === "RETURN_IN_TRANSIT") && tracking?.currentLat && tracking?.currentLng && (
+      {((order.status as string) === "OUT_FOR_DELIVERY" || (order.status as string) === "RETURN_IN_TRANSIT") && tracking?.currentLat && tracking?.currentLng && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card border rounded-2xl p-4 mb-4 print:hidden shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <Truck className="w-4 h-4 text-primary" />
             <h2 className="font-semibold">
-              {order.status === "RETURN_IN_TRANSIT" ? "Return Pickup — Live Tracking" : "Live Tracking"}
+              {(order.status as string) === "RETURN_IN_TRANSIT" ? "Return Pickup — Live Tracking" : "Live Tracking"}
             </h2>
             <Badge className="bg-green-100 text-green-700 animate-pulse text-xs">● Live</Badge>
           </div>
@@ -339,7 +339,7 @@ export function OrderDetailPage() {
             <MapContainer center={[tracking.currentLat, tracking.currentLng]} zoom={14} style={{ height: "100%", width: "100%" }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OpenStreetMap" />
               <Marker position={[tracking.currentLat, tracking.currentLng]} icon={markerIcon}>
-                <Popup>{order.status === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Delivery Agent"}</Popup>
+                <Popup>{(order.status as string) === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Delivery Agent"}</Popup>
               </Marker>
             </MapContainer>
           </div>
@@ -348,7 +348,7 @@ export function OrderDetailPage() {
               <div className="flex items-center gap-2 text-sm">
                 <UserIcon className="w-4 h-4 text-muted-foreground" />
                 <span className="font-medium">{tracking.agentName}</span>
-                <Badge variant="secondary" className="text-xs">{order.status === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Agent"}</Badge>
+                <Badge variant="secondary" className="text-xs">{(order.status as string) === "RETURN_IN_TRANSIT" ? "Pickup Agent" : "Agent"}</Badge>
               </div>
               {tracking.agentPhone && (
                 <a href={`tel:${tracking.agentPhone}`} className="text-primary hover:underline text-sm flex items-center gap-1">

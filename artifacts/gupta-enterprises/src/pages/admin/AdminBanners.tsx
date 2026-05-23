@@ -265,7 +265,7 @@ export function AdminBanners() {
                     </div>
                     {b.subtitle && <p className="text-sm text-muted-foreground line-clamp-2">{b.subtitle}</p>}
                     {linkedName ? (
-                      <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1"><Package className="w-3 h-3" /> Links to product: {linkedName}</p>
+                      <p className="text-xs text-blue-600 flex items-center gap-1 mt-1"><Package className="w-3 h-3" /> Links to product: {linkedName}</p>
                     ) : b.linkUrl ? (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><ExternalLink className="w-3 h-3" /> {b.linkUrl}</p>
                     ) : null}

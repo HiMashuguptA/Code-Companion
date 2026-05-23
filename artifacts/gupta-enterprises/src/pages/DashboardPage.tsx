@@ -13,13 +13,13 @@ import { formatPrice, formatDate } from "@/lib/utils";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  CONFIRMED: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  PROCESSING: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  PACKED: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30",
-  OUT_FOR_DELIVERY: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30",
-  DELIVERED: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30",
-  CANCELLED: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30",
+  PENDING: "bg-amber-500/10 text-amber-700 border-amber-500/30",
+  CONFIRMED: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  PROCESSING: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  PACKED: "bg-purple-500/10 text-purple-700 border-purple-500/30",
+  OUT_FOR_DELIVERY: "bg-orange-500/10 text-orange-700 border-orange-500/30",
+  DELIVERED: "bg-green-500/10 text-green-700 border-green-500/30",
+  CANCELLED: "bg-red-500/10 text-red-700 border-red-500/30",
 };
 
 export function DashboardPage() {
@@ -102,7 +102,7 @@ export function DashboardPage() {
 
       {/* Total spent + Refer banner */}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
-        <div className="md:col-span-1 bg-gradient-to-br from-saffron-100 to-orange-100 dark:from-saffron-950 dark:to-orange-950 border border-primary/20 rounded-2xl p-5">
+        <div className="md:col-span-1 bg-gradient-to-br from-saffron-100 to-orange-100 border border-primary/20 rounded-2xl p-5">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
             <IndianRupee className="w-4 h-4 text-primary" /> Total Spent
           </div>
