@@ -13,7 +13,7 @@ import {
   getCheckFavoriteQueryKey, getListFavoritesQueryKey
 } from "@workspace/api-client-react";
 import type { Review } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { toast } from "sonner";

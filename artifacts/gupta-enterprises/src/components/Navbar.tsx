@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import { ShoppingCart, Bell, User, Search, Menu, Sun, Moon, Package, LayoutDashboard, Truck, RotateCw, Heart, Gift, Phone, Coins } from "lucide-react";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 import { useTheme } from "next-themes";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useGetCart, useListNotifications, useMarkAllNotificationsRead, getGetCartQueryKey, getListNotificationsQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -190,14 +190,14 @@ export function Navbar() {
                         <img src={dbUser.photoUrl} alt={dbUser.name ?? "User"} className="w-7 h-7 rounded-full object-cover" />
                       ) : (
                         <div className="w-7 h-7 rounded-full bg-yellow-300 text-[#2874F0] flex items-center justify-center text-xs font-bold">
-                          {(dbUser?.name ?? currentUser.email ?? "U")[0]?.toUpperCase()}
+                          {(dbUser?.name ?? currentUser.name ?? "U")[0]?.toUpperCase()}
                         </div>
                       )}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
                     <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium truncate">{dbUser?.name ?? currentUser.email}</p>
+                      <p className="text-sm font-medium truncate">{dbUser?.name ?? currentUser.name}</p>
                       <p className="text-xs text-muted-foreground capitalize">{dbUser?.role?.toLowerCase().replace("_", " ")}</p>
                       <div className="flex items-center gap-1 mt-1.5 text-xs">
                         <Coins className="w-3.5 h-3.5 text-amber-500" />

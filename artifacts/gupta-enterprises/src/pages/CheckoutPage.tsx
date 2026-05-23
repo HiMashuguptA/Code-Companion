@@ -11,7 +11,7 @@ import {
   getGetCartQueryKey, getGetMyReferralInfoQueryKey, getListMyCoinTransactionsQueryKey,
 } from "@workspace/api-client-react";
 import type { CartItem } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/lib/utils";
 import { SHOP_CONFIG, haversineDistanceKm } from "@/lib/shopConfig";
 import { toast } from "sonner";
@@ -138,10 +138,10 @@ export function CheckoutPage() {
   const saveAddressToProfile = async () => {
     if (!address.street || !address.city || !address.pincode) return;
     try {
-      const token = await currentUser?.getIdToken();
       await fetch("/api/users/me/save-address", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ street: address.street, city: address.city, state: address.state, pincode: address.pincode, lat: address.lat || undefined, lng: address.lng || undefined }),
       });
     } catch (_) { /* silent */ }

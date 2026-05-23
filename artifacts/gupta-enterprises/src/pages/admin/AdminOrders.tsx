@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Order } from "@workspace/api-client-react";
 import { formatPrice, formatDate, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 

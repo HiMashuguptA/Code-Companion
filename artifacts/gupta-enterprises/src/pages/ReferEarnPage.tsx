@@ -4,7 +4,7 @@ import { Gift, Copy, Check, Share2, Users, IndianRupee, MessageCircle, Mail, Spa
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 import { toast } from "sonner";
 import {

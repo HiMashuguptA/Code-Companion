@@ -10,7 +10,7 @@ import {
   getGetDeliveryAgentOrdersQueryKey
 } from "@workspace/api-client-react";
 import type { Order } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice, formatDate, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";

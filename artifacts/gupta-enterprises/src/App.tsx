@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider, useAuth } from "@/contexts/FirebaseContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";

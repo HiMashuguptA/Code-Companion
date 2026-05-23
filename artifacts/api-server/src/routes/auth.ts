@@ -1,10 +1,24 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { db, usersTable, coinTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { RegisterUserBody, UpdateProfileBody } from "@workspace/api-zod";
+import { UpdateProfileBody } from "@workspace/api-zod";
 import { authenticateUser, type AuthRequest } from "../middlewares/auth.js";
 
 const router = Router();
+
+// Replit Auth login redirect
+router.get("/replit-login", (req: Request, res: Response) => {
+  const domains = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
+  const returnTo = encodeURIComponent(`https://${domains ?? "localhost:5000"}/api/auth/replit-return`);
+  res.redirect(`https://replit.com/auth_with_repl_site?domain=${domains ?? "localhost:5000"}&redirect_uri=${returnTo}`);
+});
+
+// Replit Auth return callback (browser redirect after Replit OAuth)
+router.get("/replit-return", (req: Request, res: Response) => {
+  // The actual session creation happens via POST /api/auth/replit-callback from the frontend
+  // After Replit Auth sets the __replauthuser cookie, redirect back to the app
+  res.redirect("/");
+});
 
 const REFEREE_BONUS = 50;
 const REFERRAL_BONUS = 100;
@@ -25,13 +39,97 @@ async function uniqueReferralCode(seed: string) {
   return `GUPT${Date.now().toString(36).toUpperCase()}`;
 }
 
-router.post("/register", async (req, res) => {
-  const parsed = RegisterUserBody.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues });
+// Replit Auth callback — called by frontend after Replit Auth completes
+router.post("/replit-callback", async (req, res) => {
+  const { replitUserId, email, name, photoUrl, referralCode } = req.body as {
+    replitUserId: string;
+    email?: string;
+    name?: string;
+    photoUrl?: string;
+    referralCode?: string;
+  };
+
+  if (!replitUserId) {
+    return res.status(400).json({ error: "replitUserId is required" });
   }
 
-  const { firebaseUid, email, name, phone, photoUrl, referralCode } = parsed.data;
+  try {
+    const existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, replitUserId));
+
+    let user = existing[0];
+
+    if (!user) {
+      // New user — register
+      let referredById: number | null = null;
+      if (referralCode) {
+        const [refUser] = await db.select().from(usersTable).where(eq(usersTable.referralCode, referralCode.toUpperCase()));
+        if (refUser) referredById = refUser.id;
+      }
+
+      const newCode = await uniqueReferralCode(name ?? email ?? replitUserId);
+      const resolvedEmail = email || `${replitUserId}@replit.auth`;
+
+      const [created] = await db.insert(usersTable).values({
+        firebaseUid: replitUserId,
+        email: resolvedEmail,
+        name: name ?? null,
+        phone: null,
+        photoUrl: photoUrl ?? null,
+        role: "USER",
+        referralCode: newCode,
+        referredBy: referredById,
+        superCoins: referredById ? REFEREE_BONUS : 0,
+      }).returning();
+
+      if (referredById && created) {
+        await db.insert(coinTransactionsTable).values({
+          userId: created.id,
+          amount: REFEREE_BONUS,
+          reason: "REFEREE_BONUS",
+          description: `Welcome bonus for joining via referral`,
+        });
+      }
+
+      user = created!;
+    } else {
+      // Existing user — ensure referral code exists
+      if (!user.referralCode) {
+        const code = await uniqueReferralCode(name ?? email ?? replitUserId);
+        const [updated] = await db.update(usersTable)
+          .set({ referralCode: code })
+          .where(eq(usersTable.id, user.id))
+          .returning();
+        if (updated) user = updated;
+      }
+    }
+
+    // Persist session
+    (req.session as Record<string, unknown>).userId = user!.id;
+    (req.session as Record<string, unknown>).userRole = user!.role;
+    (req.session as Record<string, unknown>).replitUserId = replitUserId;
+
+    return res.json(formatUser(user!));
+  } catch (err) {
+    console.error("Error in replit-callback:", err);
+    req.log.error({ err }, "Failed to handle Replit auth callback");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Keep backward-compatible /register endpoint (used by existing API client hooks)
+router.post("/register", async (req, res) => {
+  const { firebaseUid, email, name, phone, photoUrl, referralCode } = req.body as {
+    firebaseUid: string;
+    email: string;
+    name?: string;
+    phone?: string;
+    photoUrl?: string;
+    referralCode?: string;
+  };
+
+  if (!firebaseUid || !email) {
+    return res.status(400).json({ error: "firebaseUid and email are required" });
+  }
 
   try {
     const existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, firebaseUid));
@@ -42,6 +140,10 @@ router.post("/register", async (req, res) => {
         const [updated] = await db.update(usersTable).set({ referralCode: code }).where(eq(usersTable.id, user.id)).returning();
         if (updated) user = updated;
       }
+      // Persist session
+      (req.session as Record<string, unknown>).userId = user.id;
+      (req.session as Record<string, unknown>).userRole = user.role;
+      (req.session as Record<string, unknown>).replitUserId = firebaseUid;
       return res.json(formatUser(user));
     }
 
@@ -65,14 +167,19 @@ router.post("/register", async (req, res) => {
     }).returning();
 
     if (referredById && user) {
-      // Referee gets 50 coins immediately on sign-up
       await db.insert(coinTransactionsTable).values({
         userId: user.id,
         amount: REFEREE_BONUS,
         reason: "REFEREE_BONUS",
         description: `Welcome bonus for joining via referral`,
       });
-      // Referrer bonus (100 coins) is awarded ONLY when the referee's first order is DELIVERED (see orders route)
+    }
+
+    // Persist session
+    if (user) {
+      (req.session as Record<string, unknown>).userId = user.id;
+      (req.session as Record<string, unknown>).userRole = user.role;
+      (req.session as Record<string, unknown>).replitUserId = firebaseUid;
     }
 
     return res.json(formatUser(user!));
@@ -83,10 +190,26 @@ router.post("/register", async (req, res) => {
   }
 });
 
-async function getCoins(userId: number) {
-  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  return u?.superCoins ?? 0;
-}
+router.post("/logout", (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: "Failed to log out" });
+    }
+    res.clearCookie("connect.sid");
+    return res.json({ message: "Logged out successfully" });
+  });
+});
+
+router.get("/me", authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
+    if (!user) return res.status(404).json({ error: "User not found" });
+    return res.json(formatUser(user));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get /me");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/profile", authenticateUser, async (req: AuthRequest, res) => {
   try {

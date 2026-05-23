@@ -10,7 +10,7 @@ import {
   getGetCartQueryKey
 } from "@workspace/api-client-react";
 import type { CartItem } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";

@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Package, ShoppingBag, Users, Tag, ChevronRight, RotateCw, Image as ImageIcon, RotateCcw } from "lucide-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo } from "react";
 

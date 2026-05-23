@@ -17,7 +17,7 @@ import { RecentlyViewedRail } from "@/components/RecentlyViewedRail";
 import { CategoryNavBar } from "@/components/CategoryNavBar";
 import { BannerSection } from "@/components/BannerSection";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
@@ -180,12 +180,10 @@ export function HomePage() {
   // Fetch user's own reviews for the "Your Reviewed" rail
   useEffect(() => {
     if (!currentUser) return;
-    currentUser.getIdToken().then(token => {
-      fetch("/api/reviews/my", { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setMyReviews(Array.isArray(data) ? data : []))
-        .catch(() => {});
-    });
+    fetch("/api/reviews/my", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMyReviews(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, [currentUser]);
 
   const baseQuery = {

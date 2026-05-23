@@ -15,7 +15,7 @@ import {
   getGetLowStockProductsQueryKey, getGetInventoryInsightsQueryKey,
   getGetTopProductsQueryKey,
 } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/lib/utils";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar,

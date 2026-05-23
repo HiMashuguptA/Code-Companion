@@ -8,7 +8,7 @@ import {
   getListOrdersQueryKey, getListFavoritesQueryKey, getGetCartQueryKey,
 } from "@workspace/api-client-react";
 import type { Order } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 

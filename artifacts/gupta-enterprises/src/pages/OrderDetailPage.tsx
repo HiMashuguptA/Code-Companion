@@ -8,7 +8,7 @@ import {
   useGetOrder, useGetOrderTracking, useUpdateOrder,
   getGetOrderQueryKey, getGetOrderTrackingQueryKey
 } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice, formatDateTime, formatDate, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
 import { SHOP_CONFIG } from "@/lib/shopConfig";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -149,10 +149,10 @@ export function OrderDetailPage() {
     if (!returnReason.trim()) { toast.error("Please provide a return reason"); return; }
     setReturnPending(true);
     try {
-      const token = await currentUser?.getIdToken();
       const res = await fetch(`/api/orders/${orderId}/return`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ reason: returnReason, images: returnImages }),
       });
       if (!res.ok) {

@@ -1,0 +1,22 @@
+5. Add Terms & Conditions Section
+Requirement
+
+Create a proper Terms & Conditions page and integrate it professionally into the application.
+
+Implementation Suggestions
+Add footer link for Terms & Conditions.
+Add acceptance checkbox during checkout/register if needed.
+Make page responsive and SEO-friendly.
+Terms & Conditions Content
+Terms & Conditions
+Please read the following terms and conditions very carefully as your use of Scholar Book House & Stationery website globalenterpriseskohima.in and services offered by Scholar Book House & Stationery are subject to your acceptance of and compliance with the following terms and conditions.
+By browsing, accessing, subscribing to or using any of our services you agree that you have read, understood and are bound by the terms, regardless of how you subscribe to or use the services. In these terms, references to “Website” shall mean the Scholar Book House & Stationery website, “you”, “user” shall mean the end user accessing the Website, its contents and using the services offered through Scholar Book House & Stationery, “Service Providers” mean independent third party service providers, and “we”, “us” and “our” shall mean Scholar Book House & Stationery and its affiliates.
+Scholar Book House & Stationery reserves the right, at its sole discretion, to change, modify, add or remove portions of these Terms of Use, at any time. It is your responsibility to check these Terms of Use periodically for changes.
+You acknowledge and undertake that you are wholly responsible for your decision to buy any product/products after your own analysis and judgement.
+In case of any violation of the terms and conditions, globalenterpriseskohima.in reserves the right to refuse further use of services or terminate accounts without prior notice.
+Ownership of goods remains with globalenterpriseskohima.in until payment is fully completed and verified.
+No order modifications should be allowed after order confirmation unless handled by admin support.
+globalenterpriseskohima.in is not responsible for failed or incorrect transactions caused by internet/network issues at customer’s end.
+While all reasonable attempts are made to ensure information accuracy, the platform is not liable for incomplete or inaccurate product information.
+Users confirm that any information provided belongs to them and does not violate third-party confidentiality.
+By purchasing or using the platform, users automatically agree to all terms and conditions mentioned above.

@@ -11,7 +11,7 @@ import {
 import type { Category } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 type CategoryForm = {
   name: string;

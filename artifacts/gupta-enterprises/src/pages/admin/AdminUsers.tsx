@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useListUsers, useUpdateUser, getListUsersQueryKey } from "@workspace/api-client-react";
 import type { User as ApiUser } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";

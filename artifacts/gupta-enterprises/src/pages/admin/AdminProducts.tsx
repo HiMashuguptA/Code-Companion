@@ -12,7 +12,7 @@ import {
   getListProductsQueryKey, getListCategoriesQueryKey, getListProductTagsQueryKey,
 } from "@workspace/api-client-react";
 import type { Product, Category } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";

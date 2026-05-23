@@ -8,7 +8,7 @@ import {
   useCheckFavorite, useAddFavorite, useRemoveFavorite, useGetCart,
   getCheckFavoriteQueryKey, getListFavoritesQueryKey, getGetCartQueryKey,
 } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";

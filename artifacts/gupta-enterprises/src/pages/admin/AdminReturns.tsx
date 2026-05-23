@@ -7,8 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useListOrders, useListUsers, getListOrdersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/FirebaseContext";
-import { auth } from "@/contexts/FirebaseContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { formatDateTime, formatPrice, getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils";
 
@@ -74,10 +73,10 @@ export function AdminReturns() {
   const returnOrders = allOrders.filter(isReturnOrder);
 
   const callApi = async (path: string, body?: object) => {
-    const token = await auth.currentUser?.getIdToken();
     const res = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body ?? {}),
     });
     if (!res.ok) {
