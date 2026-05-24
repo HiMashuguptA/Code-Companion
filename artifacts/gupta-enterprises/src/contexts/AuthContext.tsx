@@ -1,7 +1,23 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  type ReactNode,
+} from "react";
+import {
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useGetProfile, setAuthTokenGetter, getGetProfileQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
-// No bearer tokens needed — we use session cookies
+// No bearer tokens needed — session cookies handle auth
 setAuthTokenGetter(null);
 
 export type DbUser = {
@@ -13,52 +29,32 @@ export type DbUser = {
   role: "USER" | "ADMIN" | "DELIVERY_AGENT";
   addresses?: unknown[];
   superCoins?: number;
+  referralCode?: string;
   createdAt: string;
 };
 
-type ReplitUser = {
-  id: string;
-  name: string;
-  email?: string;
-  profileImage?: string;
-};
-
 type AuthContextType = {
-  currentUser: ReplitUser | null;
+  firebaseUser: FirebaseUser | null;
+  /** Alias for firebaseUser — kept for backward-compat with existing components */
+  currentUser: FirebaseUser | null;
   dbUser: DbUser | null;
   isLoading: boolean;
   refetchProfile: () => Promise<void>;
-  signIn: () => void;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-async function fetchReplitUser(): Promise<ReplitUser | null> {
+async function syncWithBackend(
+  idToken: string,
+  referralCode?: string
+): Promise<void> {
   try {
-    const res = await fetch("/__replauthuser");
-    if (!res.ok) return null;
-    const data = await res.json() as { id?: string; name?: string; email?: string; profileImage?: string };
-    if (!data.id) return null;
-    return { id: data.id, name: data.name ?? data.id, email: data.email, profileImage: data.profileImage };
-  } catch {
-    return null;
-  }
-}
-
-async function syncWithBackend(replitUser: ReplitUser, referralCode?: string): Promise<void> {
-  try {
-    await fetch("/api/auth/replit-callback", {
+    await fetch("/api/auth/firebase-callback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({
-        replitUserId: replitUser.id,
-        name: replitUser.name,
-        email: replitUser.email,
-        photoUrl: replitUser.profileImage,
-        referralCode,
-      }),
+      body: JSON.stringify({ idToken, referralCode }),
     });
   } catch (err) {
     console.error("Failed to sync with backend:", err);
@@ -66,14 +62,15 @@ async function syncWithBackend(replitUser: ReplitUser, referralCode?: string): P
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<ReplitUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const hasSyncedRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const { data: dbUser, refetch: rawRefetchProfile } = useGetProfile({
     query: {
       queryKey: getGetProfileQueryKey(),
-      enabled: !!currentUser,
+      enabled: !!firebaseUser,
       retry: false,
       staleTime: 10 * 60 * 1000,
       gcTime: 15 * 60 * 1000,
@@ -81,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchInterval: undefined,
-    }
+    },
   });
 
   const lastRefetchRef = useRef<number>(0);
@@ -97,33 +94,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [rawRefetchProfile]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function init() {
-      const user = await fetchReplitUser();
-      if (cancelled) return;
-
-      setCurrentUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
 
       if (user && !hasSyncedRef.current) {
         hasSyncedRef.current = true;
-        // Check for referral code in URL
-        const params = new URLSearchParams(window.location.search);
-        const ref = params.get("ref") ?? undefined;
-        await syncWithBackend(user, ref);
-        await rawRefetchProfile();
+        try {
+          const idToken = await user.getIdToken();
+          const params = new URLSearchParams(window.location.search);
+          const ref = params.get("ref") ?? undefined;
+          await syncWithBackend(idToken, ref);
+          await rawRefetchProfile();
+        } catch (err) {
+          console.error("Failed to sync firebase user:", err);
+        }
+      }
+
+      if (!user) {
+        hasSyncedRef.current = false;
+        queryClient.removeQueries({ queryKey: getGetProfileQueryKey() });
       }
 
       setIsLoading(false);
-    }
+    });
 
-    init();
-    return () => { cancelled = true; };
+    return () => unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const signIn = useCallback(() => {
-    window.location.href = "/api/auth/replit-login";
-  }, []);
 
   const signOut = useCallback(async () => {
     try {
@@ -132,23 +128,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     hasSyncedRef.current = false;
-    setCurrentUser(null);
+    queryClient.removeQueries({ queryKey: getGetProfileQueryKey() });
+    await firebaseSignOut(auth);
     window.location.href = "/";
-  }, []);
+  }, [queryClient]);
 
-  const contextValue = useMemo(() => ({
-    currentUser,
-    dbUser: dbUser as DbUser | null,
-    isLoading,
-    refetchProfile,
-    signIn,
-    signOut,
-  }), [currentUser, dbUser, isLoading, refetchProfile, signIn, signOut]);
+  const contextValue = useMemo(
+    () => ({
+      firebaseUser,
+      currentUser: firebaseUser,
+      dbUser: dbUser as DbUser | null,
+      isLoading,
+      refetchProfile,
+      signOut,
+    }),
+    [firebaseUser, dbUser, isLoading, refetchProfile, signOut]
+  );
 
   return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 }
 

@@ -32,7 +32,11 @@ Flipkart-style stationery e-commerce web app for Ashutosh Gupta in Kohima, Nagal
 Shop config (address, phone, email, lat/lng, 15km delivery radius) lives in `src/lib/shopConfig.ts`.
 
 Key features in place:
-- Firebase auth with role-based access (USER / ADMIN / DELIVERY_AGENT)
+- **Firebase Phone OTP auth** (completely replaces Replit auth). Flow: enter mobile → OTP → referral
+  code (new users). Backend verifies Firebase ID tokens via Google's public keys (no service account
+  needed). Route: `POST /api/auth/firebase-callback`. Token verifier: `api-server/src/lib/firebaseAdmin.ts`.
+  Firebase config: `gupta-enterprises/src/lib/firebase.ts`. Context: `src/contexts/AuthContext.tsx`.
+- Role-based access (USER / ADMIN / DELIVERY_AGENT)
 - Catalog with categories, products (with `tags`, `isFeatured`, `salesCount`, `lowStockThreshold`),
   favorites, reviews, cart, coupons
 - Leaflet/OpenStreetMap shop map and delivery-radius checkout

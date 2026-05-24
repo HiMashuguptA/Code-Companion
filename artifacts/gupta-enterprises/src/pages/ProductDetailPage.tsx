@@ -22,7 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 export function ProductDetailPage() {
   const [, params] = useRoute("/products/:id");
   const [, navigate] = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, dbUser } = useAuth();
   const productId = params?.id ?? "";
   const qc = useQueryClient();
 
@@ -112,7 +112,7 @@ export function ProductDetailPage() {
   const hasPurchased = deliveredOrders.some((o) =>
     o.items?.some((i: { productId: string }) => i.productId === productId)
   );
-  const hasReviewed = reviews?.some((r: Review) => r.userId === currentUser?.id);
+  const hasReviewed = reviews?.some((r: Review) => r.userId === dbUser?.id);
 
   const handleAddToCart = () => {
     if (!currentUser) { navigate("/auth"); return; }

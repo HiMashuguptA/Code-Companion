@@ -3,22 +3,9 @@ import { db, usersTable, coinTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { UpdateProfileBody } from "@workspace/api-zod";
 import { authenticateUser, type AuthRequest } from "../middlewares/auth.js";
+import { verifyFirebaseToken } from "../lib/firebaseAdmin.js";
 
 const router = Router();
-
-// Replit Auth login redirect
-router.get("/replit-login", (req: Request, res: Response) => {
-  const domains = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
-  const returnTo = encodeURIComponent(`https://${domains ?? "localhost:5000"}/api/auth/replit-return`);
-  res.redirect(`https://replit.com/auth_with_repl_site?domain=${domains ?? "localhost:5000"}&redirect_uri=${returnTo}`);
-});
-
-// Replit Auth return callback (browser redirect after Replit OAuth)
-router.get("/replit-return", (req: Request, res: Response) => {
-  // The actual session creation happens via POST /api/auth/replit-callback from the frontend
-  // After Replit Auth sets the __replauthuser cookie, redirect back to the app
-  res.redirect("/");
-});
 
 const REFEREE_BONUS = 50;
 const REFERRAL_BONUS = 100;
@@ -39,75 +26,107 @@ async function uniqueReferralCode(seed: string) {
   return `GUPT${Date.now().toString(36).toUpperCase()}`;
 }
 
-// Replit Auth callback — called by frontend after Replit Auth completes
-router.post("/replit-callback", async (req, res) => {
-  const { replitUserId, email, name, photoUrl, referralCode } = req.body as {
-    replitUserId: string;
-    email?: string;
-    name?: string;
-    photoUrl?: string;
+// ── Firebase Phone Auth callback ──────────────────────────────────────────────
+// Called by the frontend after Firebase verifies the OTP and returns an ID token.
+router.post("/firebase-callback", async (req: Request, res: Response) => {
+  const { idToken, referralCode } = req.body as {
+    idToken: string;
     referralCode?: string;
   };
 
-  if (!replitUserId) {
-    return res.status(400).json({ error: "replitUserId is required" });
+  if (!idToken) {
+    return res.status(400).json({ error: "idToken is required" });
   }
 
   try {
-    let existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, replitUserId));
+    const payload = await verifyFirebaseToken(idToken);
+    const { uid, phone_number, email, name } = payload;
+
+    // Phone is the primary identifier for phone-auth users
+    const resolvedPhone = phone_number ?? null;
+    // Generate a stable synthetic email for phone-only users
+    const resolvedEmail = email ?? `${uid}@phone.gupta.app`;
+
+    let existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, uid));
     let user = existing[0];
 
-    // If not found by firebaseUid, try by email to link existing accounts
-    if (!user && email) {
-      const byEmail = await db.select().from(usersTable).where(eq(usersTable.email, email));
-      if (byEmail.length > 0) {
-        user = byEmail[0];
-        // Update firebaseUid to link this new auth provider
-        await db.update(usersTable)
-          .set({ firebaseUid: replitUserId, name: name ?? user.name, photoUrl: photoUrl ?? user.photoUrl })
-          .where(eq(usersTable.id, user.id));
+    if (!user) {
+      // Try matching by phone number to link existing accounts
+      if (resolvedPhone) {
+        const byPhone = await db.select().from(usersTable).where(eq(usersTable.phone, resolvedPhone));
+        if (byPhone.length > 0) {
+          user = byPhone[0];
+          await db.update(usersTable)
+            .set({ firebaseUid: uid })
+            .where(eq(usersTable.id, user!.id));
+        }
       }
     }
 
     if (!user) {
-      // New user — register
+      // New user — create account
       let referredById: number | null = null;
       if (referralCode) {
-        const [refUser] = await db.select().from(usersTable).where(eq(usersTable.referralCode, referralCode.toUpperCase()));
+        const [refUser] = await db
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.referralCode, referralCode.toUpperCase()));
         if (refUser) referredById = refUser.id;
       }
 
-      const newCode = await uniqueReferralCode(name ?? email ?? replitUserId);
-      const resolvedEmail = email || `${replitUserId}@replit.auth`;
+      const newCode = await uniqueReferralCode(name ?? resolvedPhone ?? uid);
 
-      const [created] = await db.insert(usersTable).values({
-        firebaseUid: replitUserId,
-        email: resolvedEmail,
-        name: name ?? null,
-        phone: null,
-        photoUrl: photoUrl ?? null,
-        role: "USER",
-        referralCode: newCode,
-        referredBy: referredById,
-        superCoins: referredById ? REFEREE_BONUS : 0,
-      }).returning();
+      const [created] = await db
+        .insert(usersTable)
+        .values({
+          firebaseUid: uid,
+          email: resolvedEmail,
+          name: name ?? null,
+          phone: resolvedPhone,
+          photoUrl: null,
+          role: "USER",
+          referralCode: newCode,
+          referredBy: referredById,
+          superCoins: referredById ? REFEREE_BONUS : 0,
+        })
+        .returning();
 
       if (referredById && created) {
+        // Give referee bonus coins
         await db.insert(coinTransactionsTable).values({
           userId: created.id,
           amount: REFEREE_BONUS,
           reason: "REFEREE_BONUS",
-          description: `Welcome bonus for joining via referral`,
+          description: "Welcome bonus for joining via referral",
+        });
+
+        // Give referrer bonus coins
+        await db.update(usersTable)
+          .set({ superCoins: REFERRAL_BONUS })
+          .where(eq(usersTable.id, referredById));
+
+        await db.insert(coinTransactionsTable).values({
+          userId: referredById,
+          amount: REFERRAL_BONUS,
+          reason: "REFERRAL_BONUS",
+          description: `Referral bonus — new user joined`,
         });
       }
 
       user = created!;
     } else {
-      // Existing user — ensure referral code exists
+      // Existing user — ensure referral code exists and update phone if available
+      const updates: Partial<typeof usersTable.$inferInsert> = {};
       if (!user.referralCode) {
-        const code = await uniqueReferralCode(name ?? email ?? replitUserId);
-        const [updated] = await db.update(usersTable)
-          .set({ referralCode: code })
+        updates.referralCode = await uniqueReferralCode(name ?? resolvedPhone ?? uid);
+      }
+      if (resolvedPhone && !user.phone) {
+        updates.phone = resolvedPhone;
+      }
+      if (Object.keys(updates).length > 0) {
+        const [updated] = await db
+          .update(usersTable)
+          .set(updates)
           .where(eq(usersTable.id, user.id))
           .returning();
         if (updated) user = updated;
@@ -117,90 +136,17 @@ router.post("/replit-callback", async (req, res) => {
     // Persist session
     (req.session as Record<string, unknown>).userId = user!.id;
     (req.session as Record<string, unknown>).userRole = user!.role;
-    (req.session as Record<string, unknown>).replitUserId = replitUserId;
+    (req.session as Record<string, unknown>).firebaseUid = uid;
 
     return res.json(formatUser(user!));
   } catch (err) {
-    console.error("Error in replit-callback:", err);
-    req.log.error({ err }, "Failed to handle Replit auth callback");
+    console.error("Error in firebase-callback:", err);
+    req.log?.error({ err }, "Failed to handle Firebase auth callback");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Keep backward-compatible /register endpoint (used by existing API client hooks)
-router.post("/register", async (req, res) => {
-  const { firebaseUid, email, name, phone, photoUrl, referralCode } = req.body as {
-    firebaseUid: string;
-    email: string;
-    name?: string;
-    phone?: string;
-    photoUrl?: string;
-    referralCode?: string;
-  };
-
-  if (!firebaseUid || !email) {
-    return res.status(400).json({ error: "firebaseUid and email are required" });
-  }
-
-  try {
-    const existing = await db.select().from(usersTable).where(eq(usersTable.firebaseUid, firebaseUid));
-    if (existing.length > 0) {
-      let user = existing[0]!;
-      if (!user.referralCode) {
-        const code = await uniqueReferralCode(name ?? email);
-        const [updated] = await db.update(usersTable).set({ referralCode: code }).where(eq(usersTable.id, user.id)).returning();
-        if (updated) user = updated;
-      }
-      // Persist session
-      (req.session as Record<string, unknown>).userId = user.id;
-      (req.session as Record<string, unknown>).userRole = user.role;
-      (req.session as Record<string, unknown>).replitUserId = firebaseUid;
-      return res.json(formatUser(user));
-    }
-
-    let referredById: number | null = null;
-    if (referralCode) {
-      const [refUser] = await db.select().from(usersTable).where(eq(usersTable.referralCode, referralCode.toUpperCase()));
-      if (refUser) referredById = refUser.id;
-    }
-
-    const newCode = await uniqueReferralCode(name ?? email);
-    const [user] = await db.insert(usersTable).values({
-      firebaseUid,
-      email,
-      name: name ?? null,
-      phone: phone ?? null,
-      photoUrl: photoUrl ?? null,
-      role: "USER",
-      referralCode: newCode,
-      referredBy: referredById,
-      superCoins: referredById ? REFEREE_BONUS : 0,
-    }).returning();
-
-    if (referredById && user) {
-      await db.insert(coinTransactionsTable).values({
-        userId: user.id,
-        amount: REFEREE_BONUS,
-        reason: "REFEREE_BONUS",
-        description: `Welcome bonus for joining via referral`,
-      });
-    }
-
-    // Persist session
-    if (user) {
-      (req.session as Record<string, unknown>).userId = user.id;
-      (req.session as Record<string, unknown>).userRole = user.role;
-      (req.session as Record<string, unknown>).replitUserId = firebaseUid;
-    }
-
-    return res.json(formatUser(user!));
-  } catch (err) {
-    console.error("Error registering user:", err);
-    req.log.error({ err }, "Failed to register user");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
+// ── Logout ────────────────────────────────────────────────────────────────────
 router.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
@@ -211,29 +157,31 @@ router.post("/logout", (req, res) => {
   });
 });
 
-router.get("/me", authenticateUser, async (req: AuthRequest, res) => {
+// ── /me ───────────────────────────────────────────────────────────────────────
+router.get("/me", authenticateUser, async (req: AuthRequest, res: Response) => {
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
     if (!user) return res.status(404).json({ error: "User not found" });
     return res.json(formatUser(user));
   } catch (err) {
-    req.log.error({ err }, "Failed to get /me");
+    req.log?.error({ err }, "Failed to get /me");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.get("/profile", authenticateUser, async (req: AuthRequest, res) => {
+// ── Profile ───────────────────────────────────────────────────────────────────
+router.get("/profile", authenticateUser, async (req: AuthRequest, res: Response) => {
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!));
     if (!user) return res.status(404).json({ error: "User not found" });
     return res.json(formatUser(user));
   } catch (err) {
-    req.log.error({ err }, "Failed to get profile");
+    req.log?.error({ err }, "Failed to get profile");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.put("/profile", authenticateUser, async (req: AuthRequest, res) => {
+router.put("/profile", authenticateUser, async (req: AuthRequest, res: Response) => {
   const parsed = UpdateProfileBody.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues });
@@ -241,7 +189,8 @@ router.put("/profile", authenticateUser, async (req: AuthRequest, res) => {
   const { name, phone, photoUrl, addresses } = parsed.data;
 
   try {
-    const [user] = await db.update(usersTable)
+    const [user] = await db
+      .update(usersTable)
       .set({
         ...(name !== undefined && { name }),
         ...(phone !== undefined && { phone }),
@@ -253,7 +202,7 @@ router.put("/profile", authenticateUser, async (req: AuthRequest, res) => {
 
     return res.json(formatUser(user!));
   } catch (err) {
-    req.log.error({ err }, "Failed to update profile");
+    req.log?.error({ err }, "Failed to update profile");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
