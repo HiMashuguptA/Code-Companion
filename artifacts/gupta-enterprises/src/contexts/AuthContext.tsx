@@ -41,6 +41,7 @@ type AuthContextType = {
   isLoading: boolean;
   refetchProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  setMockFirebaseUser?: (user: any) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -121,6 +122,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const setMockFirebaseUser = useCallback(async (user: any) => {
+    setFirebaseUser(user);
+    if (user) {
+      hasSyncedRef.current = true;
+      try {
+        const idToken = await user.getIdToken();
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get("ref") ?? undefined;
+        await syncWithBackend(idToken, ref);
+        await rawRefetchProfile();
+      } catch (err) {
+        console.error("Failed to sync mock user:", err);
+      }
+    } else {
+      hasSyncedRef.current = false;
+      queryClient.removeQueries({ queryKey: getGetProfileQueryKey() });
+    }
+  }, [rawRefetchProfile, queryClient]);
+
   const signOut = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -129,7 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     hasSyncedRef.current = false;
     queryClient.removeQueries({ queryKey: getGetProfileQueryKey() });
-    await firebaseSignOut(auth);
+    try {
+      await firebaseSignOut(auth);
+    } catch {
+      // ignore
+    }
     window.location.href = "/";
   }, [queryClient]);
 
@@ -141,8 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       refetchProfile,
       signOut,
+      setMockFirebaseUser,
     }),
-    [firebaseUser, dbUser, isLoading, refetchProfile, signOut]
+    [firebaseUser, dbUser, isLoading, refetchProfile, signOut, setMockFirebaseUser]
   );
 
   return (

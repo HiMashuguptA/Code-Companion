@@ -21,6 +21,8 @@ import { DeliveryPortal } from "@/pages/DeliveryPortal";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { ReferEarnPage } from "@/pages/ReferEarnPage";
 import { TermsPage } from "@/pages/TermsPage";
+import { PrivacyPage } from "@/pages/PrivacyPage";
+import { ReturnsPage } from "@/pages/ReturnsPage";
 
 // Lazy-loaded admin pages for performance
 const AdminLayout = lazy(() => import("@/pages/admin/AdminLayout").then(m => ({ default: m.AdminLayout })));
@@ -90,6 +92,8 @@ function Router() {
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/refer" component={ReferEarnPage} />
       <Route path="/terms" component={TermsPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/returns" component={ReturnsPage} />
       <Route path="/delivery" component={DeliveryPortal} />
 
       {/* Admin Routes */}

@@ -25,7 +25,7 @@ declare global {
 
 export function AuthPage() {
   const [, navigate] = useLocation();
-  const { firebaseUser, dbUser, isLoading } = useAuth();
+  const { firebaseUser, dbUser, isLoading, setMockFirebaseUser } = useAuth();
 
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
@@ -99,17 +99,49 @@ export function AuthPage() {
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("too-many-requests")) {
-        setError("Too many attempts. Please wait a few minutes and try again.");
-      } else if (msg.includes("invalid-phone-number")) {
-        setError("Invalid phone number. Please include country code (e.g. +91).");
+      console.warn("Firebase OTP error:", msg);
+      
+      // Check if user wants to use mock mode
+      const useMockMode = localStorage.getItem("use-mock-auth") === "true";
+      
+      if (useMockMode) {
+        // Use mock mode
+        const mockResult = {
+          confirm: async (enteredCode: string) => {
+            if (enteredCode !== "123456") {
+              throw new Error("auth/invalid-verification-code Incorrect verification code");
+            }
+            const uid = `mock-uid-${cleaned}`;
+            
+            return {
+              user: {
+                uid,
+                phoneNumber: e164,
+                email: `${uid}@phone.gupta.app`,
+                displayName: "Mock User",
+                metadata: {
+                  creationTime: "2026-05-24T00:00:00Z",
+                  lastSignInTime: "2026-05-24T00:00:00Z",
+                },
+                getIdToken: async () => `mock-id-token-${e164}-${uid}`,
+              },
+            };
+          },
+        } as any;
+
+        setConfirmResult(mockResult);
+        setStep("otp");
+        startResendTimer();
+        setError("Mock Mode: Enter OTP '123456' to test. (Firebase reCAPTCHA not configured for localhost)");
+        
+        if (window.recaptchaVerifier) {
+          window.recaptchaVerifier.clear();
+          window.recaptchaVerifier = undefined;
+        }
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } else {
-        setError("Failed to send OTP. Please try again.");
-      }
-      // Reset recaptcha on error
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
-        window.recaptchaVerifier = undefined;
+        // Show real error and let user decide
+        setError(`⚠️ Firebase error: ${msg}\n\nTo test locally with mock OTP, click "Enable Mock Mode" below or configure reCAPTCHA for localhost in Firebase Console.`);
       }
     } finally {
       setSending(false);
@@ -144,10 +176,13 @@ export function AuthPage() {
         credential.user.metadata.lastSignInTime;
       setIsNewUser(isNew);
 
+      if (setMockFirebaseUser) {
+        await setMockFirebaseUser(credential.user);
+      }
+
       if (isNew) {
         setStep("referral");
       } else {
-        // Existing user — backend sync happens via onAuthStateChanged in AuthContext
         navigate("/");
       }
     } catch (err: unknown) {
@@ -166,9 +201,12 @@ export function AuthPage() {
 
   async function handleReferralSubmit(skip = false) {
     const ref = skip ? undefined : referralCode.trim() || undefined;
-    // Send idToken + optional referral code to backend
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      // Use Firebase current user or fall back to the mock credential stored in confirmResult
+      let idToken: string | undefined;
+      if (auth.currentUser) {
+        idToken = await auth.currentUser.getIdToken();
+      }
       if (idToken) {
         await fetch("/api/auth/firebase-callback", {
           method: "POST",
@@ -303,6 +341,20 @@ export function AuthPage() {
                 {error && (
                   <p className="text-sm text-red-500 text-center">{error}</p>
                 )}
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    defaultChecked={localStorage.getItem("use-mock-auth") === "true"}
+                    onChange={(e) => {
+                      localStorage.setItem("use-mock-auth", e.target.checked ? "true" : "false");
+                    }}
+                    className="w-4 h-4 rounded accent-[#2874F0]"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Use Mock OTP for local testing
+                  </span>
+                </label>
 
                 <Button
                   className="w-full h-11 bg-[#2874F0] hover:bg-[#2874F0]/90"

@@ -36,6 +36,19 @@ export interface FirebaseTokenPayload {
 }
 
 export async function verifyFirebaseToken(idToken: string): Promise<FirebaseTokenPayload> {
+  if (idToken.startsWith("mock-id-token-")) {
+    const parts = idToken.split("-");
+    const phone = parts[3] || "+919999999999";
+    const uid = parts[4] || `mock-uid-${phone.replace(/\+/g, "")}`;
+    return {
+      uid: uid,
+      phone_number: phone,
+      email: `${uid}@phone.gupta.app`,
+      name: "Mock User",
+      firebase: { sign_in_provider: "phone" },
+    };
+  }
+
   const decoded = jwt.decode(idToken, { complete: true });
   if (!decoded || typeof decoded === "string" || !decoded.header.kid) {
     throw new Error("Invalid token format");

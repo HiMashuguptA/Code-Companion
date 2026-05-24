@@ -30,6 +30,7 @@ const shopIcon = L.divIcon({
 });
 
 type SortKey = "newest" | "price_asc" | "price_desc" | "popularity" | "discount";
+type FeaturedFilter = true | undefined;
 
 // ─── FilterContent must be defined OUTSIDE HomePage so React doesn't remount it on every render ───
 interface FilterContentProps {
@@ -166,6 +167,7 @@ export function HomePage() {
   const [inStock, setInStock] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("newest");
+  const [featured, setFeatured] = useState<FeaturedFilter>(undefined);
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [myReviews, setMyReviews] = useState<Array<{ productId: string }>>([]);
@@ -174,6 +176,15 @@ export function HomePage() {
     const sp = new URLSearchParams(locationSearch);
     setSearch(sp.get("search") ?? "");
     setCategory(sp.get("category") ?? "");
+    // Parse featured and sort params from View All links
+    const featuredParam = sp.get("featured");
+    setFeatured(featuredParam === "true" ? true : undefined);
+    const sortParam = sp.get("sort") as SortKey | null;
+    if (sortParam && ["newest", "price_asc", "price_desc", "popularity", "discount"].includes(sortParam)) {
+      setSort(sortParam);
+    } else if (!sortParam) {
+      setSort("newest");
+    }
     setPage(1);
   }, [locationSearch]);
 
@@ -194,6 +205,7 @@ export function HomePage() {
     inStock: inStock || undefined,
     tags: selectedTags.length ? selectedTags.join(",") : undefined,
     minDiscount: minDiscount ? parseFloat(minDiscount) : undefined,
+    featured: featured ? "true" : undefined,
     sort,
     page,
     limit: 24,
@@ -312,13 +324,14 @@ export function HomePage() {
     setMinDiscount("");
     setInStock(false);
     setSelectedTags([]);
+    setFeatured(undefined);
     setSort("newest");
     setPage(1);
     navigate("/");
   }, [navigate]);
 
-  const hasFilters = !!(search || category || minPrice || maxPrice || minDiscount || inStock || selectedTags.length);
-  const activeFilterCount = [search, category, minPrice, maxPrice, minDiscount, inStock ? "1" : "", ...selectedTags].filter(Boolean).length;
+  const hasFilters = !!(search || category || minPrice || maxPrice || minDiscount || inStock || selectedTags.length || featured);
+  const activeFilterCount = [search, category, minPrice, maxPrice, minDiscount, inStock ? "1" : "", featured ? "1" : "", ...selectedTags].filter(Boolean).length;
 
   return (
     <div className="bg-[#f1f3f6] min-h-screen">
@@ -469,6 +482,7 @@ export function HomePage() {
                 if (search) p.set("search", search);
                 navigate(p.toString() ? `/?${p.toString()}` : "/");
               }} />}
+              {featured && <Chip label="⭐ Featured" onClear={() => { setFeatured(undefined); navigate("/"); }} />}
               {selectedTags.map(t => <Chip key={t} label={t} onClear={() => toggleTag(t)} />)}
               {minPrice && <Chip label={`Min ₹${minPrice}`} onClear={() => setMinPrice("")} />}
               {maxPrice && <Chip label={`Max ₹${maxPrice}`} onClear={() => setMaxPrice("")} />}

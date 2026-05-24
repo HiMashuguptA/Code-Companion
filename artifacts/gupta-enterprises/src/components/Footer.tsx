@@ -48,8 +48,8 @@ export function Footer() {
             <h3 className="font-semibold text-sm mb-3">Legal</h3>
             <ul className="space-y-2 text-xs text-muted-foreground">
               <li><Link href="/terms" className="hover:text-primary">Terms & Conditions</Link></li>
-              <li><span className="hover:text-primary cursor-pointer">Privacy Policy</span></li>
-              <li><span className="hover:text-primary cursor-pointer">Return Policy</span></li>
+              <li><Link href="/privacy" className="hover:text-primary">Privacy Policy</Link></li>
+              <li><Link href="/returns" className="hover:text-primary">Return Policy</Link></li>
             </ul>
           </div>
 

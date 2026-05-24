@@ -10,7 +10,11 @@ const PROD_URL =
   process.env.PROD_DATABASE_URL ||
   "postgresql://neondb_owner:npg_xqS7vuZK8TOI@ep-dry-snow-ae0fw61l.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require";
 
-const pool = new Pool({ connectionString: PROD_URL, ssl: { rejectUnauthorized: false } });
+// Determine SSL settings based on environment (localhost doesn't support SSL)
+const isLocalhost = PROD_URL.includes("localhost");
+const sslConfig = isLocalhost ? false : { rejectUnauthorized: false };
+
+const pool = new Pool({ connectionString: PROD_URL, ssl: sslConfig });
 
 async function run() {
   const client = await pool.connect();
